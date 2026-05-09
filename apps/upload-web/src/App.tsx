@@ -6,7 +6,7 @@ export default function App() {
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [taskId, setTaskId] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processCanvasThreshold = (src: string): Promise<string> => {
@@ -75,15 +75,13 @@ export default function App() {
     setIsUploading(true);
     
     try {
-      // In a real scenario, this connects to our FastAPI backend
       const res = await fetch('http://localhost:8000/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_data: processedImage })
       });
       if (res.ok) {
-        const data = await res.json();
-        setTaskId(data.task_id);
+        setIsSubmitted(true);
       } else {
         console.error("Upload failed");
       }
@@ -107,13 +105,13 @@ export default function App() {
           </p>
         </div>
 
-        {taskId ? (
+        {isSubmitted ? (
           <div className="flex flex-col items-center justify-center space-y-4 py-12">
             <div className="w-16 h-16 bg-green-100 text-green-500 rounded-full flex items-center justify-center">
               <CheckCircle2 size={32} />
             </div>
-            <p className="font-medium text-lg">Artwork Uploaded!</p>
-            <p className="text-sm text-slate-500">Wait for it to appear in the gallery.</p>
+            <p className="font-medium text-lg">Artwork Submitted!</p>
+            <p className="text-sm text-slate-500">Head to the Gallery to see it come alive.</p>
           </div>
         ) : (
           <>

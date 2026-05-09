@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Application, Sprite, Filter, Texture, Ticker } from 'pixi.js';
 
 const vertexSource = `
@@ -33,22 +33,89 @@ void main(void) {
 }
 `;
 
+interface GalleryItem {
+  id: string;
+  video_url: string | null;
+  image_path: string | null;
+}
+
+const API_URL = 'http://localhost:8000';
+const POLL_INTERVAL = 10_000; // 10 seconds
+
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [itemCount, setItemCount] = useState(0);
+  const appRef = useRef<Application | null>(null);
+  const spritesRef = useRef<Sprite[]>([]);
+  const renderedIdsRef = useRef<Set<string>>(new Set());
+  const chromaFilterRef = useRef<Filter | null>(null);
+
+  const fetchGallery = useCallback(async (): Promise<GalleryItem[]> => {
+    try {
+      const res = await fetch(`${API_URL}/api/gallery`);
+      if (res.ok) return await res.json();
+    } catch (err) {
+      console.warn('Gallery fetch failed:', err);
+    }
+    return [];
+  }, []);
+
+  const addSprite = useCallback((item: GalleryItem, app: Application) => {
+    const mockCanvas = document.createElement('canvas');
+    mockCanvas.width = 100;
+    mockCanvas.height = 100;
+    const ctx = mockCanvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#00FF00';
+      ctx.fillRect(0, 0, 100, 100);
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      const hash = item.id.charCodeAt(0) + item.id.charCodeAt(1);
+      const shapeType = hash % 3;
+      if (shapeType === 0) {
+        ctx.arc(50, 50, 20 + (hash % 15), 0, Math.PI * 2);
+      } else if (shapeType === 1) {
+        ctx.rect(20 + (hash % 10), 20 + (hash % 10), 60 - (hash % 20), 60 - (hash % 20));
+      } else {
+        ctx.moveTo(50, 10 + (hash % 10));
+        ctx.lineTo(90 - (hash % 10), 90 - (hash % 10));
+        ctx.lineTo(10 + (hash % 10), 90 - (hash % 10));
+        ctx.closePath();
+      }
+      ctx.fill();
+    }
+    const texture = Texture.from(mockCanvas);
+    const sprite = new Sprite(texture);
+    sprite.x = Math.random() * app.screen.width;
+    sprite.y = Math.random() * app.screen.height;
+    sprite.anchor.set(0.5);
+    sprite.scale.set(0.5 + Math.random() * 0.5);
+    sprite.rotation = Math.random() * Math.PI * 2;
+    if (chromaFilterRef.current) {
+      sprite.filters = [chromaFilterRef.current];
+    }
+    (sprite as any).vx = (Math.random() - 0.5) * 2;
+    (sprite as any).vy = (Math.random() - 0.5) * 2;
+    app.stage.addChild(sprite);
+    spritesRef.current.push(sprite);
+    renderedIdsRef.current.add(item.id);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    let app: Application;
+    let destroyed = false;
 
     const initPixi = async () => {
-      app = new Application();
+      const app = new Application();
       await app.init({ 
         resizeTo: window, 
         background: '#0f172a', 
         hello: true 
       });
+      if (destroyed) return;
       containerRef.current?.appendChild(app.canvas);
+      appRef.current = app;
 
       let chromaFilter: Filter;
       try {
@@ -56,63 +123,25 @@ export default function App() {
           gl: { vertex: vertexSource, fragment: fragmentSource }
         });
       } catch (e) {
-         console.warn("Could not create filter:", e);
-         chromaFilter = new Filter({ glProgram: undefined } as any);
+        console.warn("Could not create filter:", e);
+        chromaFilter = new Filter({ glProgram: undefined } as any);
+      }
+      chromaFilterRef.current = chromaFilter;
+
+      // Fetch initial gallery data and render sprites
+      const items = await fetchGallery();
+      setItemCount(items.length);
+      for (const item of items) {
+        addSprite(item, app);
       }
 
-      // Generate a mock green-screen video texture
-      // For this prototype, we'll create a canvas texture that flashes green and white
-      // to simulate the video texture loading, since we don't have a real MP4 yet.
-      const mockCanvas = document.createElement('canvas');
-      mockCanvas.width = 100;
-      mockCanvas.height = 100;
-      const ctx = mockCanvas.getContext('2d');
-      if (ctx) {
-          ctx.fillStyle = '#00FF00'; // Green background
-          ctx.fillRect(0, 0, 100, 100);
-          ctx.fillStyle = '#000000'; // Black drawing
-          ctx.beginPath();
-          ctx.arc(50, 50, 20, 0, Math.PI * 2);
-          ctx.fill();
-      }
-      const mockTexture = Texture.from(mockCanvas);
-
-      // Render up to 1000 items
-      const sprites: Sprite[] = [];
-      const numItems = 1000;
-
-      for (let i = 0; i < numItems; i++) {
-        const sprite = new Sprite(mockTexture);
-        sprite.x = Math.random() * app.screen.width;
-        sprite.y = Math.random() * app.screen.height;
-        sprite.anchor.set(0.5);
-        
-        // Random scale and rotation
-        sprite.scale.set(0.5 + Math.random() * 0.5);
-        sprite.rotation = Math.random() * Math.PI * 2;
-        
-        // Apply the WebGL Fragment Shader to remove green
-        if (chromaFilter) {
-           sprite.filters = [chromaFilter];
-        }
-
-        // Custom velocity properties for the render loop
-        (sprite as any).vx = (Math.random() - 0.5) * 2;
-        (sprite as any).vy = (Math.random() - 0.5) * 2;
-
-        app.stage.addChild(sprite);
-        sprites.push(sprite);
-      }
-
-      // Main Render Loop for massive concurrency
+      // Main Render Loop
       app.ticker.add((ticker: Ticker) => {
-        for (let i = 0; i < sprites.length; i++) {
-          const s = sprites[i];
+        for (const s of spritesRef.current) {
           s.x += (s as any).vx * ticker.deltaTime;
           s.y += (s as any).vy * ticker.deltaTime;
           s.rotation += 0.01 * ticker.deltaTime;
 
-          // Screen wrapping (Culling/Wrapping)
           if (s.x > app.screen.width + 50) s.x = -50;
           if (s.x < -50) s.x = app.screen.width + 50;
           if (s.y > app.screen.height + 50) s.y = -50;
@@ -125,12 +154,27 @@ export default function App() {
 
     initPixi();
 
+    // Poll for new artworks every 10 seconds
+    const interval = setInterval(async () => {
+      if (!appRef.current) return;
+      const items = await fetchGallery();
+      setItemCount(items.length);
+      // Diff: only add sprites for newly completed artworks
+      const newItems = items.filter(item => !renderedIdsRef.current.has(item.id));
+      for (const item of newItems) {
+        addSprite(item, appRef.current);
+      }
+    }, POLL_INTERVAL);
+
     return () => {
-      if (app) {
-        app.destroy(true, { children: true });
+      destroyed = true;
+      clearInterval(interval);
+      if (appRef.current) {
+        appRef.current.destroy(true, { children: true });
+        appRef.current = null;
       }
     };
-  }, []);
+  }, [fetchGallery]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-slate-900">
@@ -146,7 +190,7 @@ export default function App() {
             Virtual Gallery
           </h1>
           <p className="text-teal-100/80 font-medium mt-2 drop-shadow">
-            Rendering 1,000 Concurrent Animated Shaders
+            {itemCount} Artworks Floating
           </p>
         </div>
         
