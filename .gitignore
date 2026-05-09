@@ -12,8 +12,8 @@ env/
 venv/
 .venv/
 .pytest_cache/
-test.db
-magic_doodle.db
+*.db
+apps/api-server/uploads/
 
 # Environment
 .env
