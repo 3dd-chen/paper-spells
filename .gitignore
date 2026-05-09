@@ -1,0 +1,26 @@
+# Node
+node_modules/
+dist/
+build/
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+test.db
+magic_doodle.db
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vite
+*.local
