@@ -1,26 +1,42 @@
-# Node
+# ── Node ─────────────────────────────────────────────────────────────────────
 node_modules/
 dist/
 build/
 .pnpm-store/
 
-# Python
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*.pyo
 .Python
 env/
 venv/
 .venv/
 .pytest_cache/
+
+# ── Database ──────────────────────────────────────────────────────────────────
 *.db
+*.db-shm
+*.db-wal
+
+# ── Project-specific ──────────────────────────────────────────────────────────
 apps/api-server/uploads/
 
-# Environment
+# ── Environment variables (secrets — never commit) ────────────────────────────
 .env
+.env.local
+.env.*.local
+# Allow the example file (no secrets inside)
+!.env.example
+!apps/api-server/.env.example
 
-# OS
+# ── GCP credentials (never commit) ───────────────────────────────────────────
+**/gcp-credentials.json
+*.json.key
+
+# ── IDE / tool artefacts ──────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# Vite
 *.local
+.agents/
+skills-lock.json

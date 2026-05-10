@@ -1,0 +1,33 @@
+"""
+Abstract base class and shared types for AI video generation providers.
+"""
+from __future__ import annotations
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
+
+
+class ProviderStatus(str, Enum):
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass
+class ProviderResult:
+    status: ProviderStatus
+    video_url: Optional[str] = None
+    error: Optional[str] = None
+
+
+class AIProvider(ABC):
+    """Abstract base class for AI video generation providers."""
+
+    @abstractmethod
+    async def submit(self, image_path: str, aspect_ratio: str = "16:9") -> tuple[str, Optional[str]]:
+        """Submit an image for video generation. Returns (provider_task_id, facing_direction)."""
+
+    @abstractmethod
+    async def check_status(self, provider_task_id: str) -> ProviderResult:
+        """Check the status of a previously submitted task."""

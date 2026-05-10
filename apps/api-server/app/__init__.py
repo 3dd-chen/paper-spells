@@ -1,0 +1,1 @@
+# Paper Spells API package

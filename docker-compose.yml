@@ -1,3 +1,0 @@
-# PostgreSQL has been removed as the tech stack uses SQLite for simplicity.
-# You can add Redis or other infrastructure here if needed in the future.
-services: {}

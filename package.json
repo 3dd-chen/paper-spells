@@ -1,14 +1,11 @@
 {
   "name": "paper-spells-monorepo",
   "version": "1.0.0",
-  "description": "Paper Spells Monorepo",
+  "description": "Paper Spells — turn paper doodles into animated videos with Veo AI",
   "private": true,
   "scripts": {
     "dev:upload": "pnpm --filter upload-web dev",
     "dev:gallery": "pnpm --filter gallery-web dev",
     "dev:all": "pnpm run --parallel /dev:.*/"
-  },
-  "devDependencies": {
-    "turbo": "^2.0.0"
   }
 }

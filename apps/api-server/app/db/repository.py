@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from models import Artwork
+from app.db.models import Artwork
 
 
 class ArtworkRepository:
@@ -20,11 +20,13 @@ class ArtworkRepository:
         result = await self.session.execute(select(Artwork).where(Artwork.id == task_id))
         return result.scalar_one_or_none()
 
-    async def update_to_generating(self, task_id: str, provider_task_id: str) -> Optional[Artwork]:
+    async def update_to_generating(self, task_id: str, provider_task_id: str, facing_direction: Optional[str] = None) -> Optional[Artwork]:
         artwork = await self.get_by_id(task_id)
         if artwork:
             artwork.status = "generating"
             artwork.provider_task_id = provider_task_id
+            if facing_direction:
+                artwork.facing_direction = facing_direction
             self.session.add(artwork)
             await self.session.commit()
         return artwork
