@@ -7,7 +7,6 @@ from typing import List
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import AI_PROVIDER, UPLOAD_DIR
 from app.db.repository import ArtworkRepository
 from app.providers import AIProvider, MockProvider, GeminiVeoProvider, ProviderStatus
 from app.schemas import UploadRequest, UploadResponse, GalleryItem
@@ -27,20 +26,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Select provider based on AI_PROVIDER env var
+# Provider map
 _provider_map: dict[str, type[AIProvider]] = {
     "gemini": GeminiVeoProvider,
     "mock": MockProvider,
 }
-ai_provider: AIProvider = _provider_map.get(AI_PROVIDER, MockProvider)()
 
-
-# ── Dependency ────────────────────────────────────────────────────────────────
+# ── Dependencies ─────────────────────────────────────────────────────────────
 
 def get_repo(request: Request) -> ArtworkRepository:
     # Access the D1 binding from the request scope env (provided by Cloudflare)
     db = request.scope["env"].DB
     return ArtworkRepository(db)
+
+def get_provider(request: Request) -> AIProvider:
+    # Access the environment variables provided by Cloudflare
+    env = request.scope["env"]
+    # Default to 'mock' if not set
+    provider_name = getattr(env, "AI_PROVIDER", "mock")
+    provider_cls = _provider_map.get(provider_name, MockProvider)
+    return provider_cls()
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -50,14 +55,14 @@ async def upload_artwork(
     req: UploadRequest,
     request: Request,
     repo: ArtworkRepository = Depends(get_repo),
+    provider: AIProvider = Depends(get_provider),
 ) -> UploadResponse:
     """
     1. Validate + decode Base64 image
-    2. Save image to disk
-    3. Write DB record (pending)
+    2. Save image to R2 (via provider)
+    3. Write DB record (generating)
     4. Submit to AI provider → get provider_task_id
-    5. Update DB record (generating)
-    6. Return task_id to client
+    5. Return task_id to client
     """
     # Step 1: Validate Base64 before any DB writes
     try:
@@ -65,18 +70,24 @@ async def upload_artwork(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid Base64 image data")
 
-    # Step 2: Write file to disk (UPLOAD_DIR is resolved from config.py)
-    filename = f"{uuid.uuid4()}.png"
-    filepath = UPLOAD_DIR / filename
-    filepath.write_bytes(image_bytes)
+    file_id = str(uuid.uuid4())
+    
+    # We no longer save to local disk because Cloudflare Workers doesn't support it!
+    # Instead, we pass the bytes directly to the provider.
 
-    # Step 3: DB record — only created after file is safely written
-    artwork = await repo.create_artwork(image_path=str(filepath))
+    # Step 2 & 3: DB record
+    # We use file_id as the image_path identifier in DB for now
+    artwork = await repo.create_artwork(image_path=f"images/{file_id}.png")
 
-    # Steps 4 & 5
+    # Steps 4
     try:
-        r2_bucket = request.scope["env"].BUCKET
-        provider_task_id, facing_direction = await ai_provider.submit(str(filepath), req.aspect_ratio, r2_bucket=r2_bucket)
+        env = request.scope["env"]
+        provider_task_id, facing_direction = await provider.submit(
+            image_bytes=image_bytes,
+            file_id=file_id,
+            aspect_ratio=req.aspect_ratio,
+            env=env
+        )
         logger.info(f"[upload] Provider accepted task: {provider_task_id}, direction: {facing_direction}")
         await repo.update_to_generating(artwork["id"], provider_task_id, facing_direction)
         return UploadResponse(task_id=artwork["id"], status="generating")
@@ -90,24 +101,26 @@ async def upload_artwork(
 async def get_gallery(
     request: Request,
     repo: ArtworkRepository = Depends(get_repo),
+    provider: AIProvider = Depends(get_provider),
 ) -> List[GalleryItem]:
     """
     Lazy-poll all 'generating' tasks, update completed/failed ones,
     then return all completed artworks.
     """
     generating = await repo.get_all_generating()
-    r2_bucket = request.scope["env"].BUCKET
+    env = request.scope["env"]
     
     for artwork in generating:
         if not artwork["provider_task_id"]:
             continue
         try:
-            result = await ai_provider.check_status(artwork["provider_task_id"], r2_bucket=r2_bucket)
+            result = await provider.check_status(artwork["provider_task_id"], env=env)
             if result.status == ProviderStatus.COMPLETED and result.video_url:
                 await repo.update_to_completed(artwork["id"], result.video_url)
             elif result.status == ProviderStatus.FAILED:
                 await repo.update_to_failed(artwork["id"])
-        except Exception:
+        except Exception as e:
+            logger.error(f"[gallery] Error checking status for {artwork['id']}: {e}")
             pass  # Retry on next gallery poll
 
     completed = await repo.get_all_completed()

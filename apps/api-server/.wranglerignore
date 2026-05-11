@@ -1,0 +1,7 @@
+tests/
+scripts/
+.venv/
+.venv-workers/
+python_modules/
+__pycache__/
+*.pyc

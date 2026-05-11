@@ -9,12 +9,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import os
 from typing import Optional, Any
 
 import httpx
 
-from app.config import R2_PUBLIC_URL, GCS_OUTPUT_BUCKET_URI
 from app.providers.base import AIProvider, ProviderResult, ProviderStatus
 
 logger = logging.getLogger(__name__)
@@ -22,36 +20,29 @@ logger = logging.getLogger(__name__)
 
 class GeminiVeoProvider(AIProvider):
     def __init__(self) -> None:
-        self.r2_public_url = R2_PUBLIC_URL
-
-        # We use httpx instead of genai client
-        self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        self.gcs_output_uri = GCS_OUTPUT_BUCKET_URI
+        pass
 
     # ── submit ────────────────────────────────────────────────────────────────
 
-    async def submit(self, image_path: str, aspect_ratio: str = "16:9", r2_bucket: Any = None) -> tuple[str, Optional[str]]:
-        file_id = os.path.basename(image_path).split(".")[0]
+    async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None) -> tuple[str, Optional[str]]:
+        if not env:
+            logger.error("Environment object (env) is required!")
+            raise ValueError("Environment object is required")
 
-        # Read image bytes
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
+        api_key = env.GEMINI_API_KEY or env.GOOGLE_API_KEY
+        gcs_output_uri = env.GCS_OUTPUT_BUCKET_URI
+
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
         # 1. Upload original image to R2 for archival using binding
-        if r2_bucket:
-            try:
-                # In JS: await bucket.put(key, value)
-                # In Python Pyodide FFI, it's also await bucket.put(key, value)
-                await r2_bucket.put(f"images/{file_id}.png", image_bytes)
-                logger.info(f"Uploaded image to R2 via binding: images/{file_id}.png")
-            except Exception as e:
-                logger.error(f"Failed to upload image to R2 via binding: {e}")
-        else:
-            logger.warning("R2 bucket binding not available in submit!")
+        try:
+            await env.BUCKET.put(f"images/{file_id}.png", image_bytes)
+            logger.info(f"Uploaded image to R2 via binding: images/{file_id}.png")
+        except Exception as e:
+            logger.error(f"Failed to upload image to R2 via binding: {e}")
 
-        if not self.api_key:
-            logger.error("GEMINI_API_KEY or GOOGLE_API_KEY is not set!")
+        if not api_key:
+            logger.error("GEMINI_API_KEY or GOOGLE_API_KEY is not set in env!")
             raise ValueError("API Key is required")
 
         # 2. Analyze image with Gemini → generate a custom Veo prompt
@@ -74,7 +65,7 @@ class GeminiVeoProvider(AIProvider):
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}",
                     json={
                         "contents": [{
                             "parts": [
@@ -115,7 +106,7 @@ class GeminiVeoProvider(AIProvider):
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-001:generateVideos?key={self.api_key}",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-001:generateVideos?key={api_key}",
                     json={
                         "prompt": custom_prompt,
                         "image": {"inline_data": {"mime_type": "image/png", "data": base64_image}},
@@ -123,7 +114,7 @@ class GeminiVeoProvider(AIProvider):
                             "aspect_ratio": aspect_ratio,
                             "number_of_videos": 1,
                             "duration_seconds": 4,
-                            "output_gcs_uri": f"{self.gcs_output_uri.rstrip('/')}/{file_id}/"
+                            "output_gcs_uri": f"{gcs_output_uri.rstrip('/')}/{file_id}/"
                         }
                     },
                     timeout=30.0
@@ -143,15 +134,21 @@ class GeminiVeoProvider(AIProvider):
 
     # ── check_status ──────────────────────────────────────────────────────────
 
-    async def check_status(self, provider_task_id: str, r2_bucket: Any = None) -> ProviderResult:
-        if not self.api_key:
+    async def check_status(self, provider_task_id: str, env: Any = None) -> ProviderResult:
+        if not env:
+            return ProviderResult(status=ProviderStatus.FAILED, error="Environment object is required")
+
+        api_key = env.GEMINI_API_KEY or env.GOOGLE_API_KEY
+        r2_public_url = env.R2_PUBLIC_URL
+
+        if not api_key:
             return ProviderResult(status=ProviderStatus.FAILED, error="API Key is required")
 
         try:
             async with httpx.AsyncClient() as client:
                 # Poll the operation
                 resp = await client.get(
-                    f"https://generativelanguage.googleapis.com/v1beta/{provider_task_id}?key={self.api_key}",
+                    f"https://generativelanguage.googleapis.com/v1beta/{provider_task_id}?key={api_key}",
                     timeout=30.0
                 )
                 
@@ -200,18 +197,14 @@ class GeminiVeoProvider(AIProvider):
                 r2_key = f"videos/{gcs_folder}_{filename}"
 
                 # Upload to R2 via binding
-                if r2_bucket:
-                    try:
-                        await r2_bucket.put(r2_key, video_bytes)
-                        logger.info(f"Uploaded video to R2 via binding: {r2_key}")
-                    except Exception as e:
-                        logger.error(f"Failed to upload video to R2 via binding: {e}")
-                        return ProviderResult(status=ProviderStatus.FAILED, error="Failed to upload video to R2")
-                else:
-                    logger.warning("R2 bucket binding not available in check_status!")
-                    return ProviderResult(status=ProviderStatus.FAILED, error="R2 binding missing")
+                try:
+                    await env.BUCKET.put(r2_key, video_bytes)
+                    logger.info(f"Uploaded video to R2 via binding: {r2_key}")
+                except Exception as e:
+                    logger.error(f"Failed to upload video to R2 via binding: {e}")
+                    return ProviderResult(status=ProviderStatus.FAILED, error="Failed to upload video to R2")
 
-                video_url = f"{self.r2_public_url}/{r2_key}"
+                video_url = f"{r2_public_url.rstrip('/')}/{r2_key}"
                 logger.info(f"Video ready at: {video_url}")
                 return ProviderResult(status=ProviderStatus.COMPLETED, video_url=video_url)
 
