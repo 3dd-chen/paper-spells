@@ -41,7 +41,6 @@ def get_repo(request: Request) -> ArtworkRepository:
     # Access the D1 binding from the request scope env (provided by Cloudflare)
     db = request.scope["env"].DB
     return ArtworkRepository(db)
-    return ArtworkRepository(db)
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -49,6 +48,7 @@ def get_repo(request: Request) -> ArtworkRepository:
 @app.post("/api/upload", response_model=UploadResponse)
 async def upload_artwork(
     req: UploadRequest,
+    request: Request,
     repo: ArtworkRepository = Depends(get_repo),
 ) -> UploadResponse:
     """
@@ -75,7 +75,8 @@ async def upload_artwork(
 
     # Steps 4 & 5
     try:
-        provider_task_id, facing_direction = await ai_provider.submit(str(filepath), req.aspect_ratio)
+        r2_bucket = request.scope["env"].BUCKET
+        provider_task_id, facing_direction = await ai_provider.submit(str(filepath), req.aspect_ratio, r2_bucket=r2_bucket)
         logger.info(f"[upload] Provider accepted task: {provider_task_id}, direction: {facing_direction}")
         await repo.update_to_generating(artwork["id"], provider_task_id, facing_direction)
         return UploadResponse(task_id=artwork["id"], status="generating")
@@ -87,6 +88,7 @@ async def upload_artwork(
 
 @app.get("/api/gallery", response_model=List[GalleryItem])
 async def get_gallery(
+    request: Request,
     repo: ArtworkRepository = Depends(get_repo),
 ) -> List[GalleryItem]:
     """
@@ -94,11 +96,13 @@ async def get_gallery(
     then return all completed artworks.
     """
     generating = await repo.get_all_generating()
+    r2_bucket = request.scope["env"].BUCKET
+    
     for artwork in generating:
         if not artwork["provider_task_id"]:
             continue
         try:
-            result = await ai_provider.check_status(artwork["provider_task_id"])
+            result = await ai_provider.check_status(artwork["provider_task_id"], r2_bucket=r2_bucket)
             if result.status == ProviderStatus.COMPLETED and result.video_url:
                 await repo.update_to_completed(artwork["id"], result.video_url)
             elif result.status == ProviderStatus.FAILED:

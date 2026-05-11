@@ -3,22 +3,18 @@ Google Gemini API (REST) + Cloudflare R2 production provider.
 
 Flow:
   submit()      → Gemini analyzes drawing via REST → Veo generates video via REST → returns operation name
-  check_status() → polls operation via REST → downloads from GCS via HTTP → uploads to R2 → returns public URL
+  check_status() → polls operation via REST → downloads from GCS via HTTP → uploads to R2 via binding → returns public URL
 """
 from __future__ import annotations
 import asyncio
 import base64
 import logging
 import os
-from typing import Optional
+from typing import Optional, Any
 
-import boto3
 import httpx
 
-from app.config import (
-    R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
-    R2_BUCKET_NAME, R2_PUBLIC_URL, GCS_OUTPUT_BUCKET_URI,
-)
+from app.config import R2_PUBLIC_URL, GCS_OUTPUT_BUCKET_URI
 from app.providers.base import AIProvider, ProviderResult, ProviderStatus
 
 logger = logging.getLogger(__name__)
@@ -26,14 +22,6 @@ logger = logging.getLogger(__name__)
 
 class GeminiVeoProvider(AIProvider):
     def __init__(self) -> None:
-        self.r2 = boto3.client(
-            service_name="s3",
-            endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-            aws_access_key_id=R2_ACCESS_KEY_ID,
-            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
-            region_name="auto",
-        )
-        self.r2_bucket = R2_BUCKET_NAME
         self.r2_public_url = R2_PUBLIC_URL
 
         # We use httpx instead of genai client
@@ -42,26 +30,25 @@ class GeminiVeoProvider(AIProvider):
 
     # ── submit ────────────────────────────────────────────────────────────────
 
-    async def submit(self, image_path: str, aspect_ratio: str = "16:9") -> tuple[str, Optional[str]]:
+    async def submit(self, image_path: str, aspect_ratio: str = "16:9", r2_bucket: Any = None) -> tuple[str, Optional[str]]:
         file_id = os.path.basename(image_path).split(".")[0]
-        loop = asyncio.get_running_loop()
-
-        # 1. Upload original image to R2 for archival
-        def _upload_image_to_r2() -> None:
-            with open(image_path, "rb") as f:
-                self.r2.put_object(
-                    Bucket=self.r2_bucket,
-                    Key=f"images/{file_id}.png",
-                    Body=f.read(),
-                    ContentType="image/png",
-                )
-
-        await loop.run_in_executor(None, _upload_image_to_r2)
 
         # Read image bytes
         with open(image_path, "rb") as f:
             image_bytes = f.read()
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+        # 1. Upload original image to R2 for archival using binding
+        if r2_bucket:
+            try:
+                # In JS: await bucket.put(key, value)
+                # In Python Pyodide FFI, it's also await bucket.put(key, value)
+                await r2_bucket.put(f"images/{file_id}.png", image_bytes)
+                logger.info(f"Uploaded image to R2 via binding: images/{file_id}.png")
+            except Exception as e:
+                logger.error(f"Failed to upload image to R2 via binding: {e}")
+        else:
+            logger.warning("R2 bucket binding not available in submit!")
 
         if not self.api_key:
             logger.error("GEMINI_API_KEY or GOOGLE_API_KEY is not set!")
@@ -156,7 +143,7 @@ class GeminiVeoProvider(AIProvider):
 
     # ── check_status ──────────────────────────────────────────────────────────
 
-    async def check_status(self, provider_task_id: str) -> ProviderResult:
+    async def check_status(self, provider_task_id: str, r2_bucket: Any = None) -> ProviderResult:
         if not self.api_key:
             return ProviderResult(status=ProviderStatus.FAILED, error="API Key is required")
 
@@ -212,18 +199,17 @@ class GeminiVeoProvider(AIProvider):
                 filename = parts[-1]
                 r2_key = f"videos/{gcs_folder}_{filename}"
 
-                # Upload to R2
-                loop = asyncio.get_running_loop()
-                def _upload_to_r2() -> None:
-                    self.r2.put_object(
-                        Bucket=self.r2_bucket,
-                        Key=r2_key,
-                        Body=video_bytes,
-                        ContentType="video/mp4",
-                    )
-                
-                await loop.run_in_executor(None, _upload_to_r2)
-                logger.info(f"Uploaded video to R2: {r2_key}")
+                # Upload to R2 via binding
+                if r2_bucket:
+                    try:
+                        await r2_bucket.put(r2_key, video_bytes)
+                        logger.info(f"Uploaded video to R2 via binding: {r2_key}")
+                    except Exception as e:
+                        logger.error(f"Failed to upload video to R2 via binding: {e}")
+                        return ProviderResult(status=ProviderStatus.FAILED, error="Failed to upload video to R2")
+                else:
+                    logger.warning("R2 bucket binding not available in check_status!")
+                    return ProviderResult(status=ProviderStatus.FAILED, error="R2 binding missing")
 
                 video_url = f"{self.r2_public_url}/{r2_key}"
                 logger.info(f"Video ready at: {video_url}")

@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
 
 
 class ProviderStatus(str, Enum):
@@ -25,9 +25,9 @@ class AIProvider(ABC):
     """Abstract base class for AI video generation providers."""
 
     @abstractmethod
-    async def submit(self, image_path: str, aspect_ratio: str = "16:9") -> tuple[str, Optional[str]]:
+    async def submit(self, image_path: str, aspect_ratio: str = "16:9", r2_bucket: Any = None) -> tuple[str, Optional[str]]:
         """Submit an image for video generation. Returns (provider_task_id, facing_direction)."""
 
     @abstractmethod
-    async def check_status(self, provider_task_id: str) -> ProviderResult:
+    async def check_status(self, provider_task_id: str, r2_bucket: Any = None) -> ProviderResult:
         """Check the status of a previously submitted task."""
