@@ -1,0 +1,6 @@
+name = "paper-spells-upload"
+compatibility_date = "2026-05-11"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
