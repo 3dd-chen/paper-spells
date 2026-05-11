@@ -62,7 +62,7 @@ export default function App() {
       )}
 
       {videos.map((v) => {
-        initInstance(v.id, v.facing_direction);
+        initInstance(v.id, v.facing_direction ?? undefined);
         return (
           <div
             key={v.id}
