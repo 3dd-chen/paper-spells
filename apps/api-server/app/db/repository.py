@@ -1,63 +1,56 @@
 from __future__ import annotations
 from typing import List, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from app.db.models import Artwork
+import uuid
 
 
 class ArtworkRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, db):
+        self.db = db
 
-    async def create_artwork(self, image_path: str) -> Artwork:
-        artwork = Artwork(status="pending", image_path=image_path)
-        self.session.add(artwork)
-        await self.session.commit()
-        await self.session.refresh(artwork)
-        return artwork
+    async def create_artwork(self, image_path: str) -> dict:
+        task_id = str(uuid.uuid4())
+        await self.db.prepare(
+            "INSERT INTO artworks (id, image_path, status) VALUES (?, ?, ?)"
+        ).bind(task_id, image_path, "pending").run()
+        
+        return {
+            "id": task_id,
+            "image_path": image_path,
+            "status": "pending"
+        }
 
-    async def get_by_id(self, task_id: str) -> Optional[Artwork]:
-        result = await self.session.execute(select(Artwork).where(Artwork.id == task_id))
-        return result.scalar_one_or_none()
+    async def get_by_id(self, task_id: str) -> Optional[dict]:
+        result = await self.db.prepare("SELECT * FROM artworks WHERE id = ?").bind(task_id).all()
+        items = result.to_py()
+        return items[0] if items else None
 
-    async def update_to_generating(self, task_id: str, provider_task_id: str, facing_direction: Optional[str] = None) -> Optional[Artwork]:
-        artwork = await self.get_by_id(task_id)
-        if artwork:
-            artwork.status = "generating"
-            artwork.provider_task_id = provider_task_id
-            if facing_direction:
-                artwork.facing_direction = facing_direction
-            self.session.add(artwork)
-            await self.session.commit()
-        return artwork
+    async def update_to_generating(self, task_id: str, provider_task_id: str, facing_direction: Optional[str] = None) -> bool:
+        if facing_direction:
+            await self.db.prepare(
+                "UPDATE artworks SET status = ?, provider_task_id = ?, facing_direction = ? WHERE id = ?"
+            ).bind("generating", provider_task_id, facing_direction, task_id).run()
+        else:
+            await self.db.prepare(
+                "UPDATE artworks SET status = ?, provider_task_id = ? WHERE id = ?"
+            ).bind("generating", provider_task_id, task_id).run()
+        return True
 
-    async def update_to_completed(self, task_id: str, video_url: str) -> Optional[Artwork]:
-        artwork = await self.get_by_id(task_id)
-        if artwork:
-            artwork.status = "completed"
-            artwork.video_url = video_url
-            self.session.add(artwork)
-            await self.session.commit()
-        return artwork
+    async def update_to_completed(self, task_id: str, video_url: str) -> bool:
+        await self.db.prepare(
+            "UPDATE artworks SET status = ?, video_url = ? WHERE id = ?"
+        ).bind("completed", video_url, task_id).run()
+        return True
 
-    async def update_to_failed(self, task_id: str) -> Optional[Artwork]:
-        artwork = await self.get_by_id(task_id)
-        if artwork:
-            artwork.status = "failed"
-            self.session.add(artwork)
-            await self.session.commit()
-        return artwork
+    async def update_to_failed(self, task_id: str) -> bool:
+        await self.db.prepare(
+            "UPDATE artworks SET status = ? WHERE id = ?"
+        ).bind("failed", task_id).run()
+        return True
 
-    async def get_all_generating(self) -> List[Artwork]:
-        result = await self.session.execute(
-            select(Artwork).where(Artwork.status == "generating")
-        )
-        return list(result.scalars().all())
+    async def get_all_generating(self) -> List[dict]:
+        result = await self.db.prepare("SELECT * FROM artworks WHERE status = 'generating'").all()
+        return result.to_py()
 
-    async def get_all_completed(self) -> List[Artwork]:
-        result = await self.session.execute(
-            select(Artwork)
-            .where(Artwork.status == "completed")
-            .order_by(Artwork.created_at.desc())
-        )
-        return list(result.scalars().all())
+    async def get_all_completed(self) -> List[dict]:
+        result = await self.db.prepare("SELECT * FROM artworks WHERE status = 'completed' ORDER BY created_at DESC").all()
+        return result.to_py()

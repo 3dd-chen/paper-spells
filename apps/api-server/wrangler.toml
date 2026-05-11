@@ -1,0 +1,13 @@
+name = "paper-spells-api"
+main = "main.py"
+compatibility_date = "2026-05-11"
+compatibility_flags = ["python_workers"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "paper-spells-db"
+database_id = "a075afab-6f96-463c-93a2-8100b2651218"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "paper-spells-media"
