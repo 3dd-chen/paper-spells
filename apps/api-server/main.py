@@ -87,7 +87,7 @@ async def upload_artwork(
         raise HTTPException(status_code=502, detail=f"Provider error: {type(e).__name__}: {e}")
 
 
-@app.get("/api/gallery", response_model=List[GalleryItem])
+@app.get("/api/gallery")
 async def get_gallery(
     request: Request,
     repo: ArtworkRepository = Depends(get_repo),

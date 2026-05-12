@@ -129,15 +129,17 @@ async def get_access_token(env=None) -> str:
     
     # 7. Exchange JWT for Access Token
     token_url = "https://oauth2.googleapis.com/token"
-    body_data = f"grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt_token}"
     
     from js import JSON
     options = JSON.parse(json.dumps({
         "method": "POST",
         "headers": {
-            "Content-Type": "application/x-www-form-urlencoded"
+            "Content-Type": "application/json"
         },
-        "body": body_data
+        "body": json.dumps({
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": jwt_token
+        })
     }))
     
     response = await fetch(token_url, options)

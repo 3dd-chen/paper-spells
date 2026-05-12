@@ -14,9 +14,6 @@ import os
 import base64
 import json
 from typing import Optional, Any
-
-from js import fetch
-
 from app.providers.base import AIProvider, ProviderResult, ProviderStatus
 from app.providers.gcp_auth import get_access_token
 
@@ -73,7 +70,7 @@ class GeminiVeoProvider(AIProvider):
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            from js import JSON
+            from js import JSON, fetch
             options = JSON.parse(json.dumps({
                 "method": "POST",
                 "headers": {
@@ -131,7 +128,7 @@ class GeminiVeoProvider(AIProvider):
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            from js import JSON
+            from js import JSON, fetch
             options = JSON.parse(json.dumps({
                 "method": "POST",
                 "headers": {
@@ -193,10 +190,11 @@ class GeminiVeoProvider(AIProvider):
             clean_task_id = re.sub(r"/publishers/google/models/[^/]+", "", provider_task_id)
             
             # Poll the operation using the correct URL (Vertex AI operations URL)
-            url = f"https://us-central1-aiplatform.googleapis.com/v1/{clean_task_id}"
+            # UUID operations are often only supported in v1beta1
+            url = f"https://us-central1-aiplatform.googleapis.com/v1beta1/{clean_task_id}"
             token = await get_access_token(env)
             
-            from js import JSON
+            from js import JSON, fetch
             options = JSON.parse(json.dumps({
                 "method": "GET",
                 "headers": {
