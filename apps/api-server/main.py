@@ -145,5 +145,20 @@ from workers import WorkerEntrypoint
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
+        from js import Response as JsResponse, Headers as JsHeaders
+        
+        if request.method == "OPTIONS":
+            headers = JsHeaders.new({
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                "Access-Control-Max-Age": "86400",
+            })
+            return JsResponse.new(None, status=204, headers=headers)
+            
         import asgi
-        return await asgi.fetch(app, request, self.env)
+        resp = await asgi.fetch(app, request, self.env)
+        # Force CORS header on the response
+        resp.headers.set("Access-Control-Allow-Origin", "*")
+        return resp
+
