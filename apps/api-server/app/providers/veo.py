@@ -38,7 +38,7 @@ class GeminiVeoProvider(AIProvider):
         else:
             api_key = os.getenv("GEMINI_API_KEY")
 
-        if env and hasattr(env, ""):
+        if env and hasattr(env, "GCP_PROJECT_ID"):
             project_id = env.GCP_PROJECT_ID
         elif os.getenv("GCP_PROJECT_ID"):
             project_id = os.getenv("GCP_PROJECT_ID")
