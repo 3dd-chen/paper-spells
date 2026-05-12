@@ -21,7 +21,7 @@ class ArtworkRepository:
 
     async def get_by_id(self, task_id: str) -> Optional[dict]:
         result = await self.db.prepare("SELECT * FROM artworks WHERE id = ?").bind(task_id).all()
-        items = result.to_py()
+        items = result.results.to_py()
         return items[0] if items else None
 
     async def update_to_generating(self, task_id: str, provider_task_id: str, facing_direction: Optional[str] = None) -> bool:
@@ -49,8 +49,8 @@ class ArtworkRepository:
 
     async def get_all_generating(self) -> List[dict]:
         result = await self.db.prepare("SELECT * FROM artworks WHERE status = 'generating'").all()
-        return result.to_py()
+        return result.results.to_py()
 
     async def get_all_completed(self) -> List[dict]:
         result = await self.db.prepare("SELECT * FROM artworks WHERE status = 'completed' ORDER BY created_at DESC").all()
-        return result.to_py()
+        return result.results.to_py()
