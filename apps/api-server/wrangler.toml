@@ -3,6 +3,39 @@ main = "main.py"
 compatibility_date = "2026-05-11"
 compatibility_flags = ["python_workers"]
 
+# General Wrangler exclude
+exclude = [
+    "tests/**",
+    "scripts/**",
+    ".venv/**",
+    ".venv-workers/**",
+    "python_modules/**",
+    ".pytest_cache/**",
+    "__pycache__/**",
+    "*.db",
+    "Dockerfile",
+    "README.md",
+    "pyproject.toml",
+    "uv.lock",
+    ".env"
+]
+
+# Pywrangler specific exclude!
+[python_modules]
+excludes = [
+    "tests/",
+    "scripts/",
+    ".venv/",
+    ".venv-workers/",
+    ".pytest_cache/",
+    "__pycache__/",
+    "Dockerfile",
+    "README.md",
+    "pyproject.toml",
+    "uv.lock",
+    ".env"
+]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "paper-spells-db"

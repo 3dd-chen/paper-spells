@@ -1,14 +1,18 @@
 """
-Google Gemini API (REST) + Cloudflare R2 production provider.
+Google Vertex AI (REST) + Cloudflare R2 provider for Cloudflare Workers.
 
-Flow:
-  submit()      → Gemini analyzes drawing via REST → Veo generates video via REST → returns operation name
-  check_status() → polls operation via REST → downloads from GCS via HTTP → uploads to R2 via binding → returns public URL
+Features:
+- Uses Gemini 2.5 Flash Lite for image analysis (Vertex AI).
+- Uses Veo 3.1 Lite via `:predictLongRunning` REST endpoint (Vertex AI).
+- Handles Base64 video response directly (No GCS bucket needed!).
+- Compatible with Cloudflare Workers (uses env.BUCKET if available, falls back to local file for testing).
 """
 from __future__ import annotations
 import asyncio
-import base64
 import logging
+import os
+import base64
+import json
 from typing import Optional, Any
 
 import httpx
@@ -25,28 +29,36 @@ class GeminiVeoProvider(AIProvider):
     # ── submit ────────────────────────────────────────────────────────────────
 
     async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None) -> tuple[str, Optional[str]]:
-        if not env:
-            logger.error("Environment object (env) is required!")
-            raise ValueError("Environment object is required")
+        # Read API Key and Project ID from env object or os.environ
+        api_key = None
+        project_id = "project-68d02a87-0962-4fe5-a9a"  # Fallback
 
-        api_key = env.GEMINI_API_KEY or env.GOOGLE_API_KEY
-        gcs_output_uri = env.GCS_OUTPUT_BUCKET_URI
+        if env and hasattr(env, "GEMINI_API_KEY"):
+            api_key = env.GEMINI_API_KEY
+        else:
+            api_key = os.getenv("GEMINI_API_KEY")
 
-        base64_image = base64.b64encode(image_bytes).decode("utf-8")
-
-        # 1. Upload original image to R2 for archival using binding
-        try:
-            await env.BUCKET.put(f"images/{file_id}.png", image_bytes)
-            logger.info(f"Uploaded image to R2 via binding: images/{file_id}.png")
-        except Exception as e:
-            logger.error(f"Failed to upload image to R2 via binding: {e}")
+        if env and hasattr(env, ""):
+            project_id = env.GCP_PROJECT_ID
+        elif os.getenv("GCP_PROJECT_ID"):
+            project_id = os.getenv("GCP_PROJECT_ID")
 
         if not api_key:
-            logger.error("GEMINI_API_KEY or GOOGLE_API_KEY is not set in env!")
-            raise ValueError("API Key is required")
+            raise ValueError("GEMINI_API_KEY not found in environment")
 
-        # 2. Analyze image with Gemini → generate a custom Veo prompt
-        logger.info(f"Analyzing image with Gemini for artwork {file_id}")
+        # 1. Upload original image to R2 for archival (if running on Worker)
+        if env and hasattr(env, "BUCKET"):
+            try:
+                # Cloudflare R2 binding
+                await env.BUCKET.put(f"images/{file_id}.png", image_bytes)
+                logger.info(f"Uploaded image to R2: images/{file_id}.png")
+            except Exception as e:
+                logger.error(f"Failed to upload image to R2: {e}")
+        else:
+            logger.info("R2 binding not available. Skipping image archival upload.")
+
+        # 2. Analyze image with Gemini 2.5 Flash Lite on Vertex AI
+        logger.info(f"Analyzing image with Gemini 2.5 Flash Lite on Vertex AI for artwork {file_id}")
         
         prompt_text = (
             "Determine if the character or object is naturally facing 'left' or 'right'. If unclear, default to 'right'.\n"
@@ -63,23 +75,31 @@ class GeminiVeoProvider(AIProvider):
         facing_direction = "right"
 
         try:
+            # Vertex AI endpoint for Gemini 2.5 Flash Lite
+            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
+            
+            image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+            
             async with httpx.AsyncClient() as client:
-                resp = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}",
+                response = await client.post(
+                    url,
                     json={
-                        "contents": [{
-                            "parts": [
-                                {"inline_data": {"mime_type": "image/png", "data": base64_image}},
-                                {"text": prompt_text}
-                            ]
-                        }]
+                        "contents": [
+                            {
+                                "role": "user",
+                                "parts": [
+                                    {"inline_data": {"mime_type": "image/png", "data": image_b64}},
+                                    {"text": prompt_text}
+                                ]
+                            }
+                        ]
                     },
                     timeout=30.0
                 )
                 
-                if resp.status_code == 200:
-                    result_json = resp.json()
-                    text = result_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if response.status_code == 200:
+                    res_json = response.json()
+                    text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
                     
                     # Strip markdown code blocks if present
                     if text.startswith("```"):
@@ -88,46 +108,60 @@ class GeminiVeoProvider(AIProvider):
                             text = text[4:]
                     text = text.strip()
                     
-                    import json
                     result = json.loads(text)
                     custom_prompt = result.get("prompt", custom_prompt)
                     facing_direction = result.get("direction", facing_direction)
                     logger.info(f"Gemini generated prompt: {custom_prompt}, direction: {facing_direction}")
                 else:
-                    logger.warning(f"Gemini API failed with status {resp.status_code}: {resp.text}")
+                    logger.warning(f"Gemini analysis failed with status {response.status_code}: {response.text}, using default prompt.")
         except Exception as e:
             logger.warning(f"Gemini analysis failed, using default prompt. Error: {e}")
 
-        # 3. Submit to Veo
+        # Add negative prompt for audio to save money!
+        custom_prompt += ", silent video, no sound, no audio track, no background music"
+
+        # 3. Submit to Veo 3.1 Lite (via predictLongRunning on Vertex AI)
         logger.info(
-            f"Submitting to Veo: file_id={file_id}, aspect_ratio={aspect_ratio}"
+            f"Submitting to Veo 3.1 Lite on Vertex AI: file_id={file_id}, aspect_ratio={aspect_ratio}"
         )
         
         try:
+            # Vertex AI endpoint for Veo 3.1 Lite
+            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/veo-3.1-lite-generate-001:predictLongRunning?key={api_key}"
+            
+            image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+            
             async with httpx.AsyncClient() as client:
-                resp = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-001:generateVideos?key={api_key}",
+                response = await client.post(
+                    url,
                     json={
-                        "prompt": custom_prompt,
-                        "image": {"inline_data": {"mime_type": "image/png", "data": base64_image}},
-                        "config": {
-                            "aspect_ratio": aspect_ratio,
-                            "number_of_videos": 1,
-                            "duration_seconds": 4,
-                            "output_gcs_uri": f"{gcs_output_uri.rstrip('/')}/{file_id}/"
+                        "instances": [
+                            {
+                                "prompt": custom_prompt,
+                                "image": {
+                                    "bytesBase64Encoded": image_b64,
+                                    "mimeType": "image/png"
+                                }
+                            }
+                        ],
+                        "parameters": {
+                            "aspectRatio": aspect_ratio,
+                            "durationSeconds": 4
+                            # Note: We DO NOT provide outputStorageUri to get bytes back!
                         }
                     },
                     timeout=30.0
                 )
                 
-                if resp.status_code == 200:
-                    op_json = resp.json()
-                    operation_name = op_json["name"]
+                if response.status_code == 200:
+                    res_json = response.json()
+                    operation_name = res_json.get("name")
                     logger.info(f"Veo operation started: {operation_name}")
                     return operation_name, facing_direction
                 else:
-                    logger.error(f"Veo API failed with status {resp.status_code}: {resp.text}")
-                    raise ValueError(f"Veo API failed: {resp.text}")
+                    logger.error(f"Veo submission failed with status {response.status_code}: {response.text}")
+                    raise Exception(f"Veo submission failed with status {response.status_code}")
+                    
         except Exception as e:
             logger.error(f"Failed to submit to Veo: {e}")
             raise e
@@ -135,80 +169,86 @@ class GeminiVeoProvider(AIProvider):
     # ── check_status ──────────────────────────────────────────────────────────
 
     async def check_status(self, provider_task_id: str, env: Any = None) -> ProviderResult:
-        if not env:
-            return ProviderResult(status=ProviderStatus.FAILED, error="Environment object is required")
-
-        api_key = env.GEMINI_API_KEY or env.GOOGLE_API_KEY
-        r2_public_url = env.R2_PUBLIC_URL
+        # Read API Key
+        api_key = None
+        if env and hasattr(env, "GEMINI_API_KEY"):
+            api_key = env.GEMINI_API_KEY
+        else:
+            api_key = os.getenv("GEMINI_API_KEY")
 
         if not api_key:
-            return ProviderResult(status=ProviderStatus.FAILED, error="API Key is required")
+            return ProviderResult(status=ProviderStatus.FAILED, error="GEMINI_API_KEY not found")
 
         try:
+            # Poll the operation using the correct URL (Vertex AI operations URL)
+            # The provider_task_id returned by Vertex AI is the full resource name:
+            # projects/.../locations/us-central1/publishers/google/models/.../operations/...
+            url = f"https://us-central1-aiplatform.googleapis.com/v1/{provider_task_id}?key={api_key}"
+            
             async with httpx.AsyncClient() as client:
-                # Poll the operation
-                resp = await client.get(
-                    f"https://generativelanguage.googleapis.com/v1beta/{provider_task_id}?key={api_key}",
-                    timeout=30.0
-                )
+                response = await client.get(url, timeout=30.0)
                 
-                if resp.status_code != 200:
-                    logger.error(f"Failed to poll operation {provider_task_id}: {resp.text}")
+                if response.status_code != 200:
+                    logger.error(f"Failed to poll Veo operation: {response.status_code} - {response.text}")
                     return ProviderResult(status=ProviderStatus.PROCESSING)
                 
-                op_json = resp.json()
-                done = op_json.get("done", False)
-                logger.info(f"Veo status: done={done}, id={provider_task_id[-36:]}")
+                res_json = response.json()
+                
+                # Check if done
+                done = res_json.get("done", False)
+                logger.info(f"Veo status: done={done}, id={provider_task_id.split('/')[-1]}")
 
                 if not done:
                     return ProviderResult(status=ProviderStatus.PROCESSING)
 
-                if "error" in op_json:
-                    logger.error(f"Veo operation error: {op_json['error']}")
-                    return ProviderResult(status=ProviderStatus.FAILED, error=str(op_json["error"]))
+                # Check for error
+                if "error" in res_json:
+                    logger.error(f"Veo operation error: {res_json['error']}")
+                    return ProviderResult(status=ProviderStatus.FAILED, error=str(res_json["error"]))
 
-                response_data = op_json.get("response", {})
-                generated_videos = response_data.get("generatedVideos", [])
+                # Operation is done and successful!
+                # Since we didn't use storage URI, the bytes should be in the response!
+                resp_obj = res_json.get("response", {})
                 
-                if not generated_videos:
-                    logger.error(f"Veo response empty or no videos. Response: {response_data}")
-                    return ProviderResult(status=ProviderStatus.FAILED, error="No video generated")
-
-                # Download from GCS via HTTP (since bucket is public)
-                video_uri: str = generated_videos[0]["video"]["uri"]
-                bucket_name = video_uri.split("/")[2]
-                blob_name = "/".join(video_uri.split("/")[3:])
-                
-                public_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
-                logger.info(f"Downloading video from public GCS URL: {public_url}")
-                
-                resp = await client.get(public_url, timeout=30.0)
-                if resp.status_code != 200:
-                    logger.error(f"Failed to download from GCS: {resp.status_code} {resp.text}")
-                    return ProviderResult(status=ProviderStatus.FAILED, error="Failed to download video from GCS")
-                
-                video_bytes = resp.content
-                logger.info(f"Downloaded {len(video_bytes)} bytes from GCS")
-
-                # Build a unique R2 key using the GCS subfolder name to avoid overwrites
-                parts = video_uri.split("/")
-                gcs_folder = parts[-2] if len(parts) >= 2 else "unknown"
-                filename = parts[-1]
-                r2_key = f"videos/{gcs_folder}_{filename}"
-
-                # Upload to R2 via binding
+                # The format for Vertex AI predictLongRunning usually has `generatedVideos`
+                video_bytes = None
                 try:
-                    await env.BUCKET.put(r2_key, video_bytes)
-                    logger.info(f"Uploaded video to R2 via binding: {r2_key}")
+                    videos = resp_obj.get("generatedVideos", [])
+                    if videos:
+                        video_b64 = videos[0]["video"].get("bytesBase64Encoded")
+                        if video_b64:
+                            video_bytes = base64.b64decode(video_b64)
                 except Exception as e:
-                    logger.error(f"Failed to upload video to R2 via binding: {e}")
-                    return ProviderResult(status=ProviderStatus.FAILED, error="Failed to upload video to R2")
+                    logger.warning(f"Could not parse video bytes from response: {e}")
 
-                video_url = f"{r2_public_url.rstrip('/')}/{r2_key}"
+                if not video_bytes:
+                    logger.error(f"No video bytes found in response: {resp_obj}")
+                    return ProviderResult(status=ProviderStatus.FAILED, error="No video bytes found in response")
+
+                # Upload to R2
+                filename = f"{provider_task_id.split('/')[-1]}.mp4"
+                r2_key = f"videos/{filename}"
+
+                if env and hasattr(env, "BUCKET"):
+                    try:
+                        # Cloudflare R2 binding
+                        await env.BUCKET.put(r2_key, video_bytes)
+                        logger.info(f"Uploaded video to R2: {r2_key}")
+                    except Exception as e:
+                        logger.error(f"Failed to upload video to R2: {e}")
+                        return ProviderResult(status=ProviderStatus.FAILED, error="Failed to upload video to R2")
+                else:
+                    logger.info("R2 binding not available. Saving to local file for testing.")
+                    os.makedirs("videos", exist_ok=True)
+                    with open(f"videos/{filename}", "wb") as f:
+                        f.write(video_bytes)
+
+                r2_public_url = os.getenv("R2_PUBLIC_URL", "https://media.hissnake.com").rstrip("/")
+                video_url = f"{r2_public_url}/{r2_key}"
                 logger.info(f"Video ready at: {video_url}")
+                
                 return ProviderResult(status=ProviderStatus.COMPLETED, video_url=video_url)
 
         except Exception as e:
-            import traceback
-            logger.error(f"Error in check_status: {type(e).__name__}: {e}\n{traceback.format_exc()}")
+            logger.error(f"Error in check_status: {e}")
             return ProviderResult(status=ProviderStatus.PROCESSING)

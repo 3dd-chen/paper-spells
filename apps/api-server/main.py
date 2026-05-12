@@ -2,6 +2,8 @@ from __future__ import annotations
 import base64
 import uuid
 import logging
+import os
+import sqlite3
 from typing import List
 
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -21,7 +23,7 @@ app = FastAPI(title="Paper Spells API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=["*"], # Allow all origins for simplicity in Cloud Run
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,18 +34,94 @@ _provider_map: dict[str, type[AIProvider]] = {
     "mock": MockProvider,
 }
 
+# ── D1 Mock Adapter for Local SQLite ─────────────────────────────────────────
+# This allows us to use the same ArtworkRepository on Cloud Run with SQLite!
+
+class D1Result:
+    def __init__(self, rows):
+        self.rows = rows
+    def to_py(self):
+        return self.rows
+
+class D1PreparedStatement:
+    def __init__(self, conn, sql):
+        self.conn = conn
+        self.sql = sql
+        self.params = []
+    
+    def bind(self, *params):
+        self.params = params
+        return self
+    
+    async def run(self):
+        cursor = self.conn.cursor()
+        cursor.execute(self.sql, self.params)
+        self.conn.commit()
+        return D1Result([])
+    
+    async def all(self):
+        cursor = self.conn.cursor()
+        cursor.execute(self.sql, self.params)
+        rows = cursor.fetchall()
+        # Convert sqlite3.Row to dict
+        dict_rows = [dict(row) for row in rows]
+        return D1Result(dict_rows)
+
+class D1MockAdapter:
+    def __init__(self, conn):
+        self.conn = conn
+    def prepare(self, sql):
+        return D1PreparedStatement(self.conn, sql)
+
+# Initialize local SQLite DB if not running on Cloudflare
+# Cloud Run disks are ephemeral, so this resets on restart!
+# For production, use Cloud SQL or a managed database.
+def init_local_db():
+    conn = sqlite3.connect("paper_spells.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS artworks (
+            id TEXT PRIMARY KEY,
+            image_path TEXT,
+            status TEXT,
+            provider_task_id TEXT,
+            facing_direction TEXT,
+            video_url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    return conn
+
+# Global DB connection for Cloud Run
+local_db_conn = None
+if not os.getenv("CF_PAGES"): # Simple check if not on Cloudflare
+    local_db_conn = init_local_db()
+
+
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
 def get_repo(request: Request) -> ArtworkRepository:
-    # Access the D1 binding from the request scope env (provided by Cloudflare)
-    db = request.scope["env"].DB
-    return ArtworkRepository(db)
+    # If running on Cloudflare Workers (via asgi.fetch)
+    if "env" in request.scope and hasattr(request.scope["env"], "DB"):
+        db = request.scope["env"].DB
+        return ArtworkRepository(db)
+    else:
+        # Running on Cloud Run or locally
+        return ArtworkRepository(D1MockAdapter(local_db_conn))
 
 def get_provider(request: Request) -> AIProvider:
-    # Access the environment variables provided by Cloudflare
-    env = request.scope["env"]
-    # Default to 'mock' if not set
-    provider_name = getattr(env, "AI_PROVIDER", "mock")
+    # Access the environment variables
+    # On Cloud Run, they are in os.environ
+    # On Cloudflare, they are in request.scope["env"]
+    provider_name = "mock"
+    
+    if "env" in request.scope and hasattr(request.scope["env"], "AI_PROVIDER"):
+        provider_name = request.scope["env"].AI_PROVIDER
+    else:
+        provider_name = os.getenv("AI_PROVIDER", "mock")
+        
     provider_cls = _provider_map.get(provider_name, MockProvider)
     return provider_cls()
 
@@ -57,14 +135,6 @@ async def upload_artwork(
     repo: ArtworkRepository = Depends(get_repo),
     provider: AIProvider = Depends(get_provider),
 ) -> UploadResponse:
-    """
-    1. Validate + decode Base64 image
-    2. Save image to R2 (via provider)
-    3. Write DB record (generating)
-    4. Submit to AI provider → get provider_task_id
-    5. Return task_id to client
-    """
-    # Step 1: Validate Base64 before any DB writes
     try:
         image_bytes = base64.b64decode(req.image_data.split(",")[-1])
     except Exception:
@@ -72,16 +142,12 @@ async def upload_artwork(
 
     file_id = str(uuid.uuid4())
     
-    # We no longer save to local disk because Cloudflare Workers doesn't support it!
-    # Instead, we pass the bytes directly to the provider.
-
-    # Step 2 & 3: DB record
-    # We use file_id as the image_path identifier in DB for now
     artwork = await repo.create_artwork(image_path=f"images/{file_id}.png")
 
-    # Steps 4
     try:
-        env = request.scope["env"]
+        # Pass request.scope["env"] if it exists (for Cloudflare fallback), otherwise None
+        env = request.scope.get("env", None)
+        
         provider_task_id, facing_direction = await provider.submit(
             image_bytes=image_bytes,
             file_id=file_id,
@@ -103,12 +169,8 @@ async def get_gallery(
     repo: ArtworkRepository = Depends(get_repo),
     provider: AIProvider = Depends(get_provider),
 ) -> List[GalleryItem]:
-    """
-    Lazy-poll all 'generating' tasks, update completed/failed ones,
-    then return all completed artworks.
-    """
     generating = await repo.get_all_generating()
-    env = request.scope["env"]
+    env = request.scope.get("env", None)
     
     for artwork in generating:
         if not artwork["provider_task_id"]:
@@ -121,7 +183,7 @@ async def get_gallery(
                 await repo.update_to_failed(artwork["id"])
         except Exception as e:
             logger.error(f"[gallery] Error checking status for {artwork['id']}: {e}")
-            pass  # Retry on next gallery poll
+            pass
 
     completed = await repo.get_all_completed()
     return [
@@ -135,7 +197,7 @@ async def health():
     return {"status": "ok"}
 
 
-# ── Cloudflare Worker Entrypoint ─────────────────────────────────────────────
+# ── Cloudflare Worker Entrypoint (Fallback) ───────────────────────────────────
 
 from workers import WorkerEntrypoint
 
