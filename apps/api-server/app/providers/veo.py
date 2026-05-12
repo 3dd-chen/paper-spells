@@ -15,7 +15,7 @@ import base64
 import json
 from typing import Optional, Any
 
-import httpx
+from js import fetch
 
 from app.providers.base import AIProvider, ProviderResult, ProviderStatus
 
@@ -80,40 +80,41 @@ class GeminiVeoProvider(AIProvider):
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    url,
-                    json={
-                        "contents": [
-                            {
-                                "role": "user",
-                                "parts": [
-                                    {"inline_data": {"mime_type": "image/png", "data": image_b64}},
-                                    {"text": prompt_text}
-                                ]
-                            }
-                        ]
-                    },
-                    timeout=30.0
-                )
+            response = await fetch(
+                url,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+                body=json.dumps({
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [
+                                {"inline_data": {"mime_type": "image/png", "data": image_b64}},
+                                {"text": prompt_text}
+                            ]
+                        }
+                    ]
+                })
+            )
+            
+            if response.status == 200:
+                res_json = (await response.json()).to_py()
+                text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
                 
-                if response.status_code == 200:
-                    res_json = response.json()
-                    text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    
-                    # Strip markdown code blocks if present
-                    if text.startswith("```"):
-                        text = text.split("```")[1]
-                        if text.startswith("json"):
-                            text = text[4:]
-                    text = text.strip()
-                    
-                    result = json.loads(text)
-                    custom_prompt = result.get("prompt", custom_prompt)
-                    facing_direction = result.get("direction", facing_direction)
-                    logger.info(f"Gemini generated prompt: {custom_prompt}, direction: {facing_direction}")
-                else:
-                    logger.warning(f"Gemini analysis failed with status {response.status_code}: {response.text}, using default prompt.")
+                # Strip markdown code blocks if present
+                if text.startswith("```"):
+                    text = text.split("```")[1]
+                    if text.startswith("json"):
+                        text = text[4:]
+                text = text.strip()
+                
+                result = json.loads(text)
+                custom_prompt = result.get("prompt", custom_prompt)
+                facing_direction = result.get("direction", facing_direction)
+                logger.info(f"Gemini generated prompt: {custom_prompt}, direction: {facing_direction}")
+            else:
+                resp_text = await response.text()
+                logger.warning(f"Gemini analysis failed with status {response.status}: {resp_text}, using default prompt.")
         except Exception as e:
             logger.warning(f"Gemini analysis failed, using default prompt. Error: {e}")
 
@@ -131,36 +132,37 @@ class GeminiVeoProvider(AIProvider):
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    url,
-                    json={
-                        "instances": [
-                            {
-                                "prompt": custom_prompt,
-                                "image": {
-                                    "bytesBase64Encoded": image_b64,
-                                    "mimeType": "image/png"
-                                }
+            response = await fetch(
+                url,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+                body=json.dumps({
+                    "instances": [
+                        {
+                            "prompt": custom_prompt,
+                            "image": {
+                                "bytesBase64Encoded": image_b64,
+                                "mimeType": "image/png"
                             }
-                        ],
-                        "parameters": {
-                            "aspectRatio": aspect_ratio,
-                            "durationSeconds": 4
-                            # Note: We DO NOT provide outputStorageUri to get bytes back!
                         }
-                    },
-                    timeout=30.0
-                )
-                
-                if response.status_code == 200:
-                    res_json = response.json()
-                    operation_name = res_json.get("name")
-                    logger.info(f"Veo operation started: {operation_name}")
-                    return operation_name, facing_direction
-                else:
-                    logger.error(f"Veo submission failed with status {response.status_code}: {response.text}")
-                    raise Exception(f"Veo submission failed with status {response.status_code}")
+                    ],
+                    "parameters": {
+                        "aspectRatio": aspect_ratio,
+                        "durationSeconds": 4
+                        # Note: We DO NOT provide outputStorageUri to get bytes back!
+                    }
+                })
+            )
+            
+            if response.status == 200:
+                res_json = (await response.json()).to_py()
+                operation_name = res_json.get("name")
+                logger.info(f"Veo operation started: {operation_name}")
+                return operation_name, facing_direction
+            else:
+                resp_text = await response.text()
+                logger.error(f"Veo submission failed with status {response.status}: {resp_text}")
+                raise Exception(f"Veo submission failed with status {response.status}")
                     
         except Exception as e:
             logger.error(f"Failed to submit to Veo: {e}")
@@ -169,6 +171,9 @@ class GeminiVeoProvider(AIProvider):
     # ── check_status ──────────────────────────────────────────────────────────
 
     async def check_status(self, provider_task_id: str, env: Any = None) -> ProviderResult:
+        if provider_task_id.startswith("mock-"):
+            return ProviderResult(status=ProviderStatus.FAILED, error="Ignoring old mock task in Gemini provider")
+
         # Read API Key
         api_key = None
         if env and hasattr(env, "GEMINI_API_KEY"):
@@ -185,69 +190,69 @@ class GeminiVeoProvider(AIProvider):
             # projects/.../locations/us-central1/publishers/google/models/.../operations/...
             url = f"https://us-central1-aiplatform.googleapis.com/v1/{provider_task_id}?key={api_key}"
             
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=30.0)
+            response = await fetch(url)
+            
+            if response.status != 200:
+                resp_text = await response.text()
+                logger.error(f"Failed to poll Veo operation: {response.status} - {resp_text}")
+                return ProviderResult(status=ProviderStatus.PROCESSING)
+            
+            res_json = (await response.json()).to_py()
                 
-                if response.status_code != 200:
-                    logger.error(f"Failed to poll Veo operation: {response.status_code} - {response.text}")
-                    return ProviderResult(status=ProviderStatus.PROCESSING)
-                
-                res_json = response.json()
-                
-                # Check if done
-                done = res_json.get("done", False)
-                logger.info(f"Veo status: done={done}, id={provider_task_id.split('/')[-1]}")
+            # Check if done
+            done = res_json.get("done", False)
+            logger.info(f"Veo status: done={done}, id={provider_task_id.split('/')[-1]}")
 
-                if not done:
-                    return ProviderResult(status=ProviderStatus.PROCESSING)
+            if not done:
+                return ProviderResult(status=ProviderStatus.PROCESSING)
 
-                # Check for error
-                if "error" in res_json:
-                    logger.error(f"Veo operation error: {res_json['error']}")
-                    return ProviderResult(status=ProviderStatus.FAILED, error=str(res_json["error"]))
+            # Check for error
+            if "error" in res_json:
+                logger.error(f"Veo operation error: {res_json['error']}")
+                return ProviderResult(status=ProviderStatus.FAILED, error=str(res_json["error"]))
 
-                # Operation is done and successful!
-                # Since we didn't use storage URI, the bytes should be in the response!
-                resp_obj = res_json.get("response", {})
-                
-                # The format for Vertex AI predictLongRunning usually has `generatedVideos`
-                video_bytes = None
+            # Operation is done and successful!
+            # Since we didn't use storage URI, the bytes should be in the response!
+            resp_obj = res_json.get("response", {})
+            
+            # The format for Vertex AI predictLongRunning usually has `generatedVideos`
+            video_bytes = None
+            try:
+                videos = resp_obj.get("generatedVideos", [])
+                if videos:
+                    video_b64 = videos[0]["video"].get("bytesBase64Encoded")
+                    if video_b64:
+                        video_bytes = base64.b64decode(video_b64)
+            except Exception as e:
+                logger.warning(f"Could not parse video bytes from response: {e}")
+
+            if not video_bytes:
+                logger.error(f"No video bytes found in response: {resp_obj}")
+                return ProviderResult(status=ProviderStatus.FAILED, error="No video bytes found in response")
+
+            # Upload to R2
+            filename = f"{provider_task_id.split('/')[-1]}.mp4"
+            r2_key = f"videos/{filename}"
+
+            if env and hasattr(env, "BUCKET"):
                 try:
-                    videos = resp_obj.get("generatedVideos", [])
-                    if videos:
-                        video_b64 = videos[0]["video"].get("bytesBase64Encoded")
-                        if video_b64:
-                            video_bytes = base64.b64decode(video_b64)
+                    # Cloudflare R2 binding
+                    await env.BUCKET.put(r2_key, video_bytes)
+                    logger.info(f"Uploaded video to R2: {r2_key}")
                 except Exception as e:
-                    logger.warning(f"Could not parse video bytes from response: {e}")
+                    logger.error(f"Failed to upload video to R2: {e}")
+                    return ProviderResult(status=ProviderStatus.FAILED, error="Failed to upload video to R2")
+            else:
+                logger.info("R2 binding not available. Saving to local file for testing.")
+                os.makedirs("videos", exist_ok=True)
+                with open(f"videos/{filename}", "wb") as f:
+                    f.write(video_bytes)
 
-                if not video_bytes:
-                    logger.error(f"No video bytes found in response: {resp_obj}")
-                    return ProviderResult(status=ProviderStatus.FAILED, error="No video bytes found in response")
-
-                # Upload to R2
-                filename = f"{provider_task_id.split('/')[-1]}.mp4"
-                r2_key = f"videos/{filename}"
-
-                if env and hasattr(env, "BUCKET"):
-                    try:
-                        # Cloudflare R2 binding
-                        await env.BUCKET.put(r2_key, video_bytes)
-                        logger.info(f"Uploaded video to R2: {r2_key}")
-                    except Exception as e:
-                        logger.error(f"Failed to upload video to R2: {e}")
-                        return ProviderResult(status=ProviderStatus.FAILED, error="Failed to upload video to R2")
-                else:
-                    logger.info("R2 binding not available. Saving to local file for testing.")
-                    os.makedirs("videos", exist_ok=True)
-                    with open(f"videos/{filename}", "wb") as f:
-                        f.write(video_bytes)
-
-                r2_public_url = os.getenv("R2_PUBLIC_URL", "https://media.hissnake.com").rstrip("/")
-                video_url = f"{r2_public_url}/{r2_key}"
-                logger.info(f"Video ready at: {video_url}")
-                
-                return ProviderResult(status=ProviderStatus.COMPLETED, video_url=video_url)
+            r2_public_url = os.getenv("R2_PUBLIC_URL", "https://media.hissnake.com").rstrip("/")
+            video_url = f"{r2_public_url}/{r2_key}"
+            logger.info(f"Video ready at: {video_url}")
+            
+            return ProviderResult(status=ProviderStatus.COMPLETED, video_url=video_url)
 
         except Exception as e:
             logger.error(f"Error in check_status: {e}")
