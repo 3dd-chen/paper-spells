@@ -35,13 +35,13 @@ _provider_map: dict[str, type[AIProvider]] = {
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
-def get_repo(request: Request) -> ArtworkRepository:
+async def get_repo(request: Request) -> ArtworkRepository:
     # Running on Cloudflare Workers — use the real D1 binding
     if "env" in request.scope and hasattr(request.scope["env"], "DB"):
         return ArtworkRepository(request.scope["env"].DB)
     raise HTTPException(status_code=500, detail="D1 database binding not available")
 
-def get_provider(request: Request) -> AIProvider:
+async def get_provider(request: Request) -> AIProvider:
     provider_name = "mock"
 
     if "env" in request.scope and hasattr(request.scope["env"], "AI_PROVIDER"):
