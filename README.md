@@ -46,7 +46,7 @@ This project is organized as a monorepo:
 2. Copy `.env.example` to `.env` and fill in your credentials:
    - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`
    - `GOOGLE_APPLICATION_CREDENTIALS` (path to your JSON key)
-   - `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`
+   - `GCP_PROJECT_ID`, `GOOGLE_CLOUD_LOCATION`
 3. Install dependencies and run:
    ```bash
    uv run uvicorn app.main:app --reload --port 8000

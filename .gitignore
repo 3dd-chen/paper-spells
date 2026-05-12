@@ -12,6 +12,9 @@ __pycache__/
 env/
 venv/
 .venv/
+.venv-workers/
+python_modules/
+.wrangler/
 .pytest_cache/
 
 # ── Database ──────────────────────────────────────────────────────────────────

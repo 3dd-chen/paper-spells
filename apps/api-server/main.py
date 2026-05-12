@@ -3,7 +3,6 @@ import base64
 import uuid
 import logging
 import os
-import sqlite3
 from typing import List
 
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -23,7 +22,7 @@ app = FastAPI(title="Paper Spells API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all origins for simplicity in Cloud Run
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,94 +33,23 @@ _provider_map: dict[str, type[AIProvider]] = {
     "mock": MockProvider,
 }
 
-# ── D1 Mock Adapter for Local SQLite ─────────────────────────────────────────
-# This allows us to use the same ArtworkRepository on Cloud Run with SQLite!
-
-class D1Result:
-    def __init__(self, rows):
-        self.rows = rows
-    def to_py(self):
-        return self.rows
-
-class D1PreparedStatement:
-    def __init__(self, conn, sql):
-        self.conn = conn
-        self.sql = sql
-        self.params = []
-    
-    def bind(self, *params):
-        self.params = params
-        return self
-    
-    async def run(self):
-        cursor = self.conn.cursor()
-        cursor.execute(self.sql, self.params)
-        self.conn.commit()
-        return D1Result([])
-    
-    async def all(self):
-        cursor = self.conn.cursor()
-        cursor.execute(self.sql, self.params)
-        rows = cursor.fetchall()
-        # Convert sqlite3.Row to dict
-        dict_rows = [dict(row) for row in rows]
-        return D1Result(dict_rows)
-
-class D1MockAdapter:
-    def __init__(self, conn):
-        self.conn = conn
-    def prepare(self, sql):
-        return D1PreparedStatement(self.conn, sql)
-
-# Initialize local SQLite DB if not running on Cloudflare
-# Cloud Run disks are ephemeral, so this resets on restart!
-# For production, use Cloud SQL or a managed database.
-def init_local_db():
-    conn = sqlite3.connect("paper_spells.db")
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS artworks (
-            id TEXT PRIMARY KEY,
-            image_path TEXT,
-            status TEXT,
-            provider_task_id TEXT,
-            facing_direction TEXT,
-            video_url TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    return conn
-
-# Global DB connection for Cloud Run
-local_db_conn = None
-if not os.getenv("CF_PAGES"): # Simple check if not on Cloudflare
-    local_db_conn = init_local_db()
-
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
 def get_repo(request: Request) -> ArtworkRepository:
-    # If running on Cloudflare Workers (via asgi.fetch)
+    # Running on Cloudflare Workers — use the real D1 binding
     if "env" in request.scope and hasattr(request.scope["env"], "DB"):
-        db = request.scope["env"].DB
-        return ArtworkRepository(db)
-    else:
-        # Running on Cloud Run or locally
-        return ArtworkRepository(D1MockAdapter(local_db_conn))
+        return ArtworkRepository(request.scope["env"].DB)
+    raise HTTPException(status_code=500, detail="D1 database binding not available")
 
 def get_provider(request: Request) -> AIProvider:
-    # Access the environment variables
-    # On Cloud Run, they are in os.environ
-    # On Cloudflare, they are in request.scope["env"]
     provider_name = "mock"
-    
+
     if "env" in request.scope and hasattr(request.scope["env"], "AI_PROVIDER"):
         provider_name = request.scope["env"].AI_PROVIDER
     else:
         provider_name = os.getenv("AI_PROVIDER", "mock")
-        
+
     provider_cls = _provider_map.get(provider_name, MockProvider)
     return provider_cls()
 
@@ -141,13 +69,10 @@ async def upload_artwork(
         raise HTTPException(status_code=400, detail="Invalid Base64 image data")
 
     file_id = str(uuid.uuid4())
-    
     artwork = await repo.create_artwork(image_path=f"images/{file_id}.png")
 
     try:
-        # Pass request.scope["env"] if it exists (for Cloudflare fallback), otherwise None
         env = request.scope.get("env", None)
-        
         provider_task_id, facing_direction = await provider.submit(
             image_bytes=image_bytes,
             file_id=file_id,
@@ -171,7 +96,7 @@ async def get_gallery(
 ) -> List[GalleryItem]:
     generating = await repo.get_all_generating()
     env = request.scope.get("env", None)
-    
+
     for artwork in generating:
         if not artwork["provider_task_id"]:
             continue
@@ -183,11 +108,15 @@ async def get_gallery(
                 await repo.update_to_failed(artwork["id"])
         except Exception as e:
             logger.error(f"[gallery] Error checking status for {artwork['id']}: {e}")
-            pass
 
     completed = await repo.get_all_completed()
     return [
-        GalleryItem(id=a["id"], video_url=a["video_url"], image_path=a["image_path"], facing_direction=a["facing_direction"])
+        GalleryItem(
+            id=a["id"],
+            video_url=a["video_url"],
+            image_path=a["image_path"],
+            facing_direction=a["facing_direction"]
+        )
         for a in completed
     ]
 
@@ -197,7 +126,7 @@ async def health():
     return {"status": "ok"}
 
 
-# ── Cloudflare Worker Entrypoint (Fallback) ───────────────────────────────────
+# ── Cloudflare Worker Entrypoint ──────────────────────────────────────────────
 
 from workers import WorkerEntrypoint
 
