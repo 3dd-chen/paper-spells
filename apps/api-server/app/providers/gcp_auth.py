@@ -131,12 +131,16 @@ async def get_access_token(env=None) -> str:
     token_url = "https://oauth2.googleapis.com/token"
     body_data = f"grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={jwt_token}"
     
-    response = await fetch(
-        token_url,
-        method="POST",
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        body=body_data
-    )
+    from js import JSON
+    options = JSON.parse(json.dumps({
+        "method": "POST",
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": body_data
+    }))
+    
+    response = await fetch(token_url, options)
     
     if response.status != 200:
         err_text = await response.text()

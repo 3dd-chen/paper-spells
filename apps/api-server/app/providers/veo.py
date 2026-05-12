@@ -73,14 +73,14 @@ class GeminiVeoProvider(AIProvider):
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            response = await fetch(
-                url,
-                method="POST",
-                headers={
+            from js import JSON
+            options = JSON.parse(json.dumps({
+                "method": "POST",
+                "headers": {
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {token}"
                 },
-                body=json.dumps({
+                "body": json.dumps({
                     "contents": [
                         {
                             "role": "user",
@@ -91,7 +91,9 @@ class GeminiVeoProvider(AIProvider):
                         }
                     ]
                 })
-            )
+            }))
+            
+            response = await fetch(url, options)
             
             if response.status == 200:
                 res_json = (await response.json()).to_py()
@@ -129,14 +131,14 @@ class GeminiVeoProvider(AIProvider):
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            response = await fetch(
-                url,
-                method="POST",
-                headers={
+            from js import JSON
+            options = JSON.parse(json.dumps({
+                "method": "POST",
+                "headers": {
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {token}"
                 },
-                body=json.dumps({
+                "body": json.dumps({
                     "instances": [
                         {
                             "prompt": custom_prompt,
@@ -149,10 +151,11 @@ class GeminiVeoProvider(AIProvider):
                     "parameters": {
                         "aspectRatio": aspect_ratio,
                         "durationSeconds": 4
-                        # Note: We DO NOT provide outputStorageUri to get bytes back!
                     }
                 })
-            )
+            }))
+            
+            response = await fetch(url, options)
             
             if response.status == 200:
                 res_json = (await response.json()).to_py()
@@ -188,11 +191,15 @@ class GeminiVeoProvider(AIProvider):
             url = f"https://us-central1-aiplatform.googleapis.com/v1/{provider_task_id}"
             token = await get_access_token(env)
             
-            response = await fetch(
-                url,
-                method="GET",
-                headers={"Authorization": f"Bearer {token}"}
-            )
+            from js import JSON
+            options = JSON.parse(json.dumps({
+                "method": "GET",
+                "headers": {
+                    "Authorization": f"Bearer {token}"
+                }
+            }))
+            
+            response = await fetch(url, options)
             
             if response.status != 200:
                 resp_text = await response.text()
