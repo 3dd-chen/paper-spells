@@ -20,24 +20,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Paper Spells API")
 
-@app.middleware("http")
-async def add_cors_header(request: Request, call_next):
-    if request.method == "OPTIONS":
-        return Response(
-            status_code=204,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Max-Age": "86400"
-            }
-        )
-    
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    return response
+@app.options("/{path:path}")
+async def options_handler():
+    return {"status": "ok"}
+
 
 
 # Provider map
@@ -145,23 +131,8 @@ from workers import WorkerEntrypoint
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
-        from js import Response as JsResponse, Headers as JsHeaders
-        try:
-            if request.method == "OPTIONS":
-                headers = JsHeaders.new({
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-                    "Access-Control-Max-Age": "86400",
-                })
-                return JsResponse.new("", status=204, headers=headers)
-                
-            import asgi
-            resp = await asgi.fetch(app, request, self.env)
-            # Force CORS header on the response
-            resp.headers.set("Access-Control-Allow-Origin", "*")
-            return resp
-        except Exception as e:
-            return JsResponse.new(f"Python Worker Error: {str(e)}", status=500)
+        import asgi
+        return await asgi.fetch(app, request, self.env)
+
 
 
