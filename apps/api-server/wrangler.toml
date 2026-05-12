@@ -3,6 +3,13 @@ main = "main.py"
 compatibility_date = "2025-11-02"
 compatibility_flags = ["python_workers", "python_dedicated_snapshot"]
 
+[vars]
+AI_PROVIDER = "gemini"
+GCP_PROJECT_ID = "project-68d02a87-0962-4fe5-a9a"
+GOOGLE_CLOUD_LOCATION = "us-central1"
+GOOGLE_GENAI_USE_VERTEXAI = "true"
+
+
 # General Wrangler exclude
 exclude = [
     "tests/**",
@@ -44,3 +51,7 @@ database_id = "a075afab-6f96-463c-93a2-8100b2651218"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "paper-spells-media"
+
+[observability.logs]
+enabled = true
+invocation_logs = true
