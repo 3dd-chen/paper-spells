@@ -18,6 +18,7 @@ from typing import Optional, Any
 from js import fetch
 
 from app.providers.base import AIProvider, ProviderResult, ProviderStatus
+from app.providers.gcp_auth import get_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -29,22 +30,13 @@ class GeminiVeoProvider(AIProvider):
     # ── submit ────────────────────────────────────────────────────────────────
 
     async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None) -> tuple[str, Optional[str]]:
-        # Read API Key and Project ID from env object or os.environ
-        api_key = None
+        # Read Project ID from env object or os.environ
         project_id = "project-68d02a87-0962-4fe5-a9a"  # Fallback
-
-        if env and hasattr(env, "GEMINI_API_KEY"):
-            api_key = env.GEMINI_API_KEY
-        else:
-            api_key = os.getenv("GEMINI_API_KEY")
 
         if env and hasattr(env, "GCP_PROJECT_ID"):
             project_id = env.GCP_PROJECT_ID
         elif os.getenv("GCP_PROJECT_ID"):
             project_id = os.getenv("GCP_PROJECT_ID")
-
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY not found in environment")
 
         # 1. Upload original image to R2 for archival (if running on Worker)
         if env and hasattr(env, "BUCKET"):
@@ -76,14 +68,18 @@ class GeminiVeoProvider(AIProvider):
 
         try:
             # Vertex AI endpoint for Gemini 2.5 Flash Lite
-            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
+            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite:generateContent"
+            token = await get_access_token(env)
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
             response = await fetch(
                 url,
                 method="POST",
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}"
+                },
                 body=json.dumps({
                     "contents": [
                         {
@@ -128,14 +124,18 @@ class GeminiVeoProvider(AIProvider):
         
         try:
             # Vertex AI endpoint for Veo 3.1 Lite
-            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/veo-3.1-lite-generate-001:predictLongRunning?key={api_key}"
+            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/veo-3.1-lite-generate-001:predictLongRunning"
+            token = await get_access_token(env)
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
             response = await fetch(
                 url,
                 method="POST",
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}"
+                },
                 body=json.dumps({
                     "instances": [
                         {
@@ -174,23 +174,25 @@ class GeminiVeoProvider(AIProvider):
         if provider_task_id.startswith("mock-"):
             return ProviderResult(status=ProviderStatus.FAILED, error="Ignoring old mock task in Gemini provider")
 
-        # Read API Key
-        api_key = None
-        if env and hasattr(env, "GEMINI_API_KEY"):
-            api_key = env.GEMINI_API_KEY
-        else:
-            api_key = os.getenv("GEMINI_API_KEY")
-
-        if not api_key:
-            return ProviderResult(status=ProviderStatus.FAILED, error="GEMINI_API_KEY not found")
+        # Read Project ID
+        project_id = "project-68d02a87-0962-4fe5-a9a"  # Fallback
+        if env and hasattr(env, "GCP_PROJECT_ID"):
+            project_id = env.GCP_PROJECT_ID
+        elif os.getenv("GCP_PROJECT_ID"):
+            project_id = os.getenv("GCP_PROJECT_ID")
 
         try:
             # Poll the operation using the correct URL (Vertex AI operations URL)
             # The provider_task_id returned by Vertex AI is the full resource name:
             # projects/.../locations/us-central1/publishers/google/models/.../operations/...
-            url = f"https://us-central1-aiplatform.googleapis.com/v1/{provider_task_id}?key={api_key}"
+            url = f"https://us-central1-aiplatform.googleapis.com/v1/{provider_task_id}"
+            token = await get_access_token(env)
             
-            response = await fetch(url)
+            response = await fetch(
+                url,
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"}
+            )
             
             if response.status != 200:
                 resp_text = await response.text()
