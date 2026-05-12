@@ -185,10 +185,15 @@ class GeminiVeoProvider(AIProvider):
             project_id = os.getenv("GCP_PROJECT_ID")
 
         try:
-            # Poll the operation using the correct URL (Vertex AI operations URL)
-            # The provider_task_id returned by Vertex AI is the full resource name:
+            import re
+            # The provider_task_id returned by predictLongRunning includes the model publisher:
             # projects/.../locations/us-central1/publishers/google/models/.../operations/...
-            url = f"https://us-central1-aiplatform.googleapis.com/v1/{provider_task_id}"
+            # However, the generic operations API only accepts:
+            # projects/.../locations/us-central1/operations/...
+            clean_task_id = re.sub(r"/publishers/google/models/[^/]+", "", provider_task_id)
+            
+            # Poll the operation using the correct URL (Vertex AI operations URL)
+            url = f"https://us-central1-aiplatform.googleapis.com/v1/{clean_task_id}"
             token = await get_access_token(env)
             
             from js import JSON
