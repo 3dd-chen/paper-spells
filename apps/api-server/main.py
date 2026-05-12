@@ -5,7 +5,7 @@ import logging
 import os
 from typing import List
 
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.repository import ArtworkRepository
@@ -23,7 +23,6 @@ app = FastAPI(title="Paper Spells API")
 @app.middleware("http")
 async def add_cors_header(request: Request, call_next):
     if request.method == "OPTIONS":
-        from fastapi.responses import Response
         return Response(
             status_code=204,
             headers={
