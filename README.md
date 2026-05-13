@@ -2,54 +2,42 @@
 
 Bring your hand-drawn doodles to life with AI! Paper Spells is a monorepo project that takes your drawings, analyzes them with Gemini, generates a video using Google Veo, and displays them in an interactive, physics-enabled gallery.
 
-## 🌟 Features
+## 🌟 Killer Features & Architecture
 
-- **Doodle to Video**: Upload a drawing with a transparent or white background. The app processes it with a green screen and uses **Google Veo (veo-3.1-lite)** to animate it.
-- **AI-Driven Prompts**: Uses **Gemini 2.5 Flash** to analyze the drawing and generate a descriptive prompt for Veo, ensuring the animation matches the character's style.
-- **Smart Orientation**: Gemini detects if the character is facing left or right and ensures the video generates in that direction. The frontend physics engine flips the video naturally based on movement.
-- **Chroma Key Gallery**: A beautiful floating gallery where videos are real-time "de-greened" on a Canvas, making the characters look like they are floating freely on the background.
-- **Interactive Physics**: 
-  - DVD-bounce style movement.
-  - Drop a "food" emoji by clicking, and all characters will gather towards it and then scatter.
-  - Social distancing: Characters gently repel each other to avoid overlapping.
+This project is built to showcase a highly scalable, edge-native architecture:
 
-## 🏗️ Architecture
+1. **Python on Edge (Cloudflare Workers)**: The FastAPI backend runs directly on Cloudflare's Edge network using Pyodide/ASGI. No traditional container or VM is required, bringing extreme scalability and low latency.
+2. **Web Crypto JWT Authentication**: Hand-crafted Google Cloud OAuth 2.0 flow using the Web Crypto API (`gcp_auth.py`). By manually parsing Service Account PEMs and signing JWTs, it bypasses the need for standard Python `cryptography` libraries, which are unavailable in Edge environments.
+3. **Dependency Injection (DI) & SOLID Design**: The backend architecture is strictly decoupled. `AIProvider`, `StorageInterface`, and `HttpClientInterface` ensure that the core logic is isolated from Cloudflare bindings or specific API SDKs.
+4. **Web Worker Image Processing**: The frontend offloads heavy chroma-key green screen and aspect ratio calculations to an `OffscreenCanvas` inside a Web Worker, ensuring a jank-free 60fps React UI.
+5. **Interactive Physics Gallery**: Uses a custom React hook to simulate DVD-bounce physics and "social distancing" between characters, allowing them to chase a dropped "food" emoji across the screen.
 
-This project is organized as a monorepo:
+## 🏗️ Tech Stack
 
-- **`apps/api-server`**: FastAPI backend that handles image uploads, database storage (SQLite), and communication with Google GenAI SDK (Gemini & Veo) and Cloudflare R2.
-- **`apps/upload-web`**: React frontend for uploading and processing drawings.
-- **`apps/gallery-web`**: React frontend for the interactive floating gallery.
-
-## 🛠️ Tech Stack
-
-- **Backend**: Python 3.9+, FastAPI, SQLAlchemy, Google GenAI SDK, Boto3 (for Cloudflare R2).
-- **Frontend**: React 18, Vite, TailwindCSS.
-- **Storage**: Cloudflare R2 (Final video hosting), Google Cloud Storage (Veo intermediate output).
-- **Database**: SQLite.
+- **Backend**: Python 3.9+, FastAPI, Google Vertex AI (Gemini & Veo REST APIs).
+- **Edge Deployment**: Cloudflare Workers (Pyodide), D1 (Database), R2 (Storage).
+- **Frontend**: React 18, Vite, TailwindCSS, SWR, Sonner.
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
 - Node.js & pnpm
-- Python 3.9+ & UV (recommended)
 - Google Cloud Project with Vertex AI enabled.
-- Cloudflare R2 bucket.
+- Cloudflare R2 bucket & D1 Database.
 
-### Backend Setup
+### Backend Setup (Edge / Wrangler)
 
 1. Navigate to the API server:
    ```bash
    cd apps/api-server
    ```
-2. Copy `.env.example` to `.env` and fill in your credentials:
-   - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`
-   - `GOOGLE_APPLICATION_CREDENTIALS` (path to your JSON key)
-   - `GCP_PROJECT_ID`, `GOOGLE_CLOUD_LOCATION`
-3. Install dependencies and run:
+2. Run the `upload_secrets.py` or manually use `wrangler secret put` to upload your credentials:
+   - `GEMINI_API_KEY`, `GCP_SERVICE_ACCOUNT`
+   - `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
+3. Start the local worker:
    ```bash
-   uv run uvicorn app.main:app --reload --port 8000
+   npx wrangler dev
    ```
 
 ### Frontend Setup
@@ -68,10 +56,3 @@ This project is organized as a monorepo:
    cd apps/gallery-web
    pnpm dev
    ```
-
-## 🔒 CORS & Proxies
-
-This project uses Vite proxies to avoid CORS issues during local development:
-- Requests to `/api` are proxied to `http://localhost:8000`.
-- Requests to `/videos` are proxied to your Cloudflare R2 public URL.
-Make sure to disable any Chrome CORS extensions as they are no longer needed!
