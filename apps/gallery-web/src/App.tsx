@@ -26,22 +26,9 @@ export default function App() {
 
   return (
     <div
-      className="relative min-h-screen w-full overflow-hidden"
-      style={{ background: 'linear-gradient(to bottom, #fff1f2, #fce7f3)', cursor: 'crosshair' }}
+      className="relative min-h-screen w-full overflow-hidden bg-gradient-to-b from-rose-50 to-pink-100 cursor-crosshair"
       onClick={handleClick}
     >
-      <style>{`
-        @keyframes pop {
-          0%   { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-          50%  { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
-          100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50%       { transform: scale(1.2); opacity: 0.7; }
-        }
-      `}</style>
-
       {/* Food emoji */}
       {food && (
         <div
@@ -70,15 +57,7 @@ export default function App() {
               const inst = instancesRef.current[v.id];
               if (inst) inst.element = el;
             }}
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: 220,
-              willChange: 'transform',
-              pointerEvents: 'none',
-              overflow: 'hidden',
-            }}
+            className="absolute top-0 left-0 w-[220px] will-change-transform pointer-events-none overflow-hidden"
           >
             <ChromaVideo src={resolveVideoUrl(v.video_url ?? '')} />
           </div>
