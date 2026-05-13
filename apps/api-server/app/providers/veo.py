@@ -136,15 +136,10 @@ class GeminiVeoProvider(AIProvider):
                 "instances": [
                     {
                         "prompt": custom_prompt,
-                        "referenceImages": [
-                            {
-                                "referenceType": "IMAGE_REFERENCE_TYPE_START_FRAME",
-                                "image": {
-                                    "bytesBase64Encoded": image_b64,
-                                    "mimeType": "image/png"
-                                }
-                            }
-                        ]
+                        "image": {
+                            "bytesBase64Encoded": image_b64,
+                            "mimeType": "image/png"
+                        }
                     }
                 ],
                 "parameters": {
@@ -153,7 +148,7 @@ class GeminiVeoProvider(AIProvider):
                     "includeAudio": False,
                     "resolution": "720p",
                     "fps": 24,
-                    "negativePrompt": "turning around, spinning, looking backwards, changing facing direction, 3d render, camera movement, audio, sound, speech, photorealistic"
+                    "negativePrompt": "turning around, spinning, looking backwards, changing facing direction, 3d render, camera movement, audio, sound, speech, photorealistic, style change, character redesign"
                 }
             }
             
