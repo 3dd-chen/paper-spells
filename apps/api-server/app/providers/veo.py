@@ -74,18 +74,32 @@ class GeminiVeoProvider(AIProvider):
         facing_direction = "right"
 
         try:
-            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite:generateContent"
-            token = await get_access_token(env)
+            api_key = None
+            if env and hasattr(env, "GEMINI_API_KEY"):
+                api_key = env.GEMINI_API_KEY
+            else:
+                api_key = os.getenv("GEMINI_API_KEY")
+
+            if api_key:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
+                headers = {"Content-Type": "application/json"}
+                logger.info("Using Gemini API Key for analysis.")
+            else:
+                # Fallback to Vertex AI if no API Key provided
+                url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite:generateContent"
+                token = await get_access_token(env)
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}"
+                }
+                logger.info("Using Vertex AI for Gemini analysis.")
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
             from js import JSON, fetch
             options = JSON.parse(json.dumps({
                 "method": "POST",
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {token}"
-                },
+                "headers": headers,
                 "body": json.dumps({
                     "contents": [
                         {
