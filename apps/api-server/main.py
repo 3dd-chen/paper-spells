@@ -32,7 +32,7 @@ class ConsoleHandler(logging.Handler):
             print(self.format(record), file=sys.stderr)
 
 handler = ConsoleHandler()
-handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+handler.setFormatter(logging.Formatter("[%(levelname)s] %(name)s: %(message)s"))
 logging.getLogger().addHandler(handler)
 logging.getLogger().setLevel(logging.INFO)
 logger = logging.getLogger(__name__)

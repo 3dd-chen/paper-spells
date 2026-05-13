@@ -118,7 +118,8 @@ class GeminiVeoProvider(AIProvider):
         return custom_prompt, facing_direction
 
     async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
-        custom_prompt += " (no background music), (no dialogue), (no ambient sound), silent video"
+        # Enforce that Veo uses the input image as the exact starting frame and strictly generates no audio.
+        custom_prompt += ". The animation MUST start seamlessly from the provided image as the exact first frame. Smooth, continuous motion. SILENT VIDEO, NO AUDIO, NO SOUND EFFECTS, NO MUSIC, MUTED."
         logger.info(f"Submitting to Veo: file_id={file_id}, aspect_ratio={aspect_ratio}")
         
         try:
