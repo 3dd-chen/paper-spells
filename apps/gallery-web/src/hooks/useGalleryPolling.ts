@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { GalleryItem } from '../types';
+import type { GalleryItem } from '../types';
 
 const API_URL = import.meta.env.VITE_API_BASE_URL as string ?? '';
 const fetcher = (url: string) => fetch(url).then(r => r.json());

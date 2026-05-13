@@ -7,8 +7,8 @@ import { resolveVideoUrl } from './lib/videoUrl';
 
 export default function App() {
   const { videos, isLoaded } = useGalleryPolling();
-  const { instancesRef, foodRef, initInstance } = usePhysicsEngine(() => setFood(null));
   const [food, setFood] = useState<{ x: number; y: number; id: number } | null>(null);
+  const { instancesRef, foodRef, initInstance } = usePhysicsEngine(() => setFood(null));
 
   const handleClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.ui-container')) return;

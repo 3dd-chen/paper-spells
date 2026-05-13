@@ -1,4 +1,5 @@
-import { useState, ChangeEvent } from 'react';
+import { useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { processImageForUpload } from './useImageProcessor';
 import { submitArtwork } from '../lib/api';
 import { toast } from 'sonner';

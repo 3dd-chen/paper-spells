@@ -70,9 +70,14 @@ self.onmessage = async (e: MessageEvent<{ src: string }>) => {
     
     // 4. Convert back to Blob/DataURL
     const outBlob = await canvas.convertToBlob({ type: 'image/png' });
-    const reader = new FileReaderSync();
-    // In web workers, FileReaderSync is available
-    const dataUrl = reader.readAsDataURL(outBlob);
+    
+    // Read as DataURL using standard FileReader asynchronously
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(outBlob);
+    });
 
     self.postMessage({ type: 'success', dataUrl, aspectRatio: targetAspectRatio });
 
