@@ -48,7 +48,15 @@ class GeminiVeoProvider(AIProvider):
         else:
             logger.info("R2 binding not available. Skipping image archival upload.")
 
-        # 2. Analyze image with Gemini 2.5 Flash Lite on Vertex AI
+        # 2. Analyze image with Gemini
+        custom_prompt, facing_direction = await self._analyze_image(image_bytes, project_id, file_id, env)
+
+        # 3. Submit to Veo
+        operation_name = await self._submit_to_veo(custom_prompt, image_bytes, project_id, aspect_ratio, file_id, env)
+
+        return operation_name, facing_direction
+
+    async def _analyze_image(self, image_bytes: bytes, project_id: str, file_id: str, env: Any) -> tuple[str, str]:
         logger.info(f"Analyzing image with Gemini 2.5 Flash Lite on Vertex AI for artwork {file_id}")
         
         prompt_text = (
@@ -66,7 +74,6 @@ class GeminiVeoProvider(AIProvider):
         facing_direction = "right"
 
         try:
-            # Vertex AI endpoint for Gemini 2.5 Flash Lite
             url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite:generateContent"
             token = await get_access_token(env)
             
@@ -98,7 +105,6 @@ class GeminiVeoProvider(AIProvider):
                 res_json = (await response.json()).to_py()
                 text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
                 
-                # Strip markdown code blocks if present
                 if text.startswith("```"):
                     text = text.split("```")[1]
                     if text.startswith("json"):
@@ -115,16 +121,17 @@ class GeminiVeoProvider(AIProvider):
         except Exception as e:
             logger.warning(f"Gemini analysis failed, using default prompt. Error: {e}")
 
+        return custom_prompt, facing_direction
+
+    async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
         # Add negative prompt for audio to save money! (Using parentheses style as suggested by workarounds)
         custom_prompt += " (no background music), (no dialogue), (no ambient sound), silent video"
 
-        # 3. Submit to Veo 3.1 Lite (via predictLongRunning on Vertex AI)
         logger.info(
             f"Submitting to Veo 3.1 Lite on Vertex AI: file_id={file_id}, aspect_ratio={aspect_ratio}"
         )
         
         try:
-            # Vertex AI endpoint for Veo 3.1 Lite
             url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/veo-3.1-lite-generate-001:predictLongRunning"
             token = await get_access_token(env)
             
@@ -160,7 +167,7 @@ class GeminiVeoProvider(AIProvider):
                 res_json = (await response.json()).to_py()
                 operation_name = res_json.get("name")
                 logger.info(f"Veo operation started: {operation_name}")
-                return operation_name, facing_direction
+                return operation_name
             else:
                 resp_text = await response.text()
                 logger.error(f"Veo submission failed with status {response.status}: {resp_text}")
