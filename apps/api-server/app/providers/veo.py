@@ -182,24 +182,30 @@ class GeminiVeoProvider(AIProvider):
             project_id = os.getenv("GCP_PROJECT_ID")
 
         try:
-            import re
             # The provider_task_id returned by predictLongRunning includes the model publisher:
             # projects/.../locations/us-central1/publishers/google/models/.../operations/...
-            # However, the generic operations API only accepts:
-            # projects/.../locations/us-central1/operations/...
-            clean_task_id = re.sub(r"/publishers/google/models/[^/]+", "", provider_task_id)
+            # We must use the fetchPredictOperation RPC on the model resource
+            parts = provider_task_id.rpartition('/operations/')
+            if parts[1]:
+                resource_name = parts[0]
+            else:
+                # Fallback to the provider_task_id if it's already stripped (unlikely)
+                resource_name = provider_task_id
             
-            # Poll the operation using the correct URL (Vertex AI operations URL)
-            # UUID operations are often only supported in v1beta1
-            url = f"https://us-central1-aiplatform.googleapis.com/v1beta1/{clean_task_id}"
+            # Poll the operation using the fetchPredictOperation URL
+            url = f"https://us-central1-aiplatform.googleapis.com/v1beta1/{resource_name}:fetchPredictOperation"
             token = await get_access_token(env)
             
             from js import JSON, fetch
             options = JSON.parse(json.dumps({
-                "method": "GET",
+                "method": "POST",
                 "headers": {
-                    "Authorization": f"Bearer {token}"
-                }
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json"
+                },
+                "body": json.dumps({
+                    "operationName": provider_task_id
+                })
             }))
             
             response = await fetch(url, options)

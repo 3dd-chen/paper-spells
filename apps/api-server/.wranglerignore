@@ -1,7 +1,8 @@
-tests/
-scripts/
+.venv
 .venv/
 .venv-workers/
-python_modules/
 __pycache__/
-*.pyc
+tests/
+test_*.py
+.python-version
+node_modules/
