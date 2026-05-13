@@ -1,7 +1,13 @@
 from __future__ import annotations
 from typing import List, Optional
 import uuid
+from enum import Enum
 
+class ArtworkStatus(str, Enum):
+    PENDING = "pending"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 class ArtworkRepository:
     def __init__(self, db):
@@ -11,12 +17,12 @@ class ArtworkRepository:
         task_id = str(uuid.uuid4())
         await self.db.prepare(
             "INSERT INTO artworks (id, image_path, status) VALUES (?, ?, ?)"
-        ).bind(task_id, image_path, "pending").run()
+        ).bind(task_id, image_path, ArtworkStatus.PENDING.value).run()
         
         return {
             "id": task_id,
             "image_path": image_path,
-            "status": "pending"
+            "status": ArtworkStatus.PENDING.value
         }
 
     async def get_by_id(self, task_id: str) -> Optional[dict]:
@@ -28,29 +34,29 @@ class ArtworkRepository:
         if facing_direction:
             await self.db.prepare(
                 "UPDATE artworks SET status = ?, provider_task_id = ?, facing_direction = ? WHERE id = ?"
-            ).bind("generating", provider_task_id, facing_direction, task_id).run()
+            ).bind(ArtworkStatus.GENERATING.value, provider_task_id, facing_direction, task_id).run()
         else:
             await self.db.prepare(
                 "UPDATE artworks SET status = ?, provider_task_id = ? WHERE id = ?"
-            ).bind("generating", provider_task_id, task_id).run()
+            ).bind(ArtworkStatus.GENERATING.value, provider_task_id, task_id).run()
         return True
 
     async def update_to_completed(self, task_id: str, video_url: str) -> bool:
         await self.db.prepare(
             "UPDATE artworks SET status = ?, video_url = ? WHERE id = ?"
-        ).bind("completed", video_url, task_id).run()
+        ).bind(ArtworkStatus.COMPLETED.value, video_url, task_id).run()
         return True
 
     async def update_to_failed(self, task_id: str) -> bool:
         await self.db.prepare(
             "UPDATE artworks SET status = ? WHERE id = ?"
-        ).bind("failed", task_id).run()
+        ).bind(ArtworkStatus.FAILED.value, task_id).run()
         return True
 
     async def get_all_generating(self) -> List[dict]:
-        result = await self.db.prepare("SELECT * FROM artworks WHERE status = 'generating'").all()
+        result = await self.db.prepare(f"SELECT * FROM artworks WHERE status = '{ArtworkStatus.GENERATING.value}'").all()
         return result.results.to_py()
 
     async def get_all_completed(self) -> List[dict]:
-        result = await self.db.prepare("SELECT * FROM artworks WHERE status = 'completed' ORDER BY created_at DESC").all()
+        result = await self.db.prepare(f"SELECT * FROM artworks WHERE status = '{ArtworkStatus.COMPLETED.value}' ORDER BY created_at DESC").all()
         return result.results.to_py()

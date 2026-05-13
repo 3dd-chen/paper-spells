@@ -16,37 +16,32 @@ import json
 from typing import Optional, Any
 from app.providers.base import AIProvider, ProviderResult, ProviderStatus
 from app.providers.gcp_auth import get_access_token
+from app.core.config import Settings
+from app.interfaces.http_client import HttpClientInterface
+from app.interfaces.storage import StorageInterface
 
 logger = logging.getLogger(__name__)
 
-
 class GeminiVeoProvider(AIProvider):
-    def __init__(self) -> None:
-        pass
+    def __init__(self, settings: Settings, http_client: HttpClientInterface, storage: StorageInterface | None = None) -> None:
+        self.settings = settings
+        self.http_client = http_client
+        self.storage = storage
+        self.token_store = {"token": None, "expiry": 0}
 
     # ── submit ────────────────────────────────────────────────────────────────
 
     async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None) -> tuple[str, Optional[str]]:
-        # Read Project ID from env object or os.environ
-        project_id = "project-68d02a87-0962-4fe5-a9a"  # Fallback
-
-        if env and hasattr(env, "GCP_PROJECT_ID"):
-            project_id = env.GCP_PROJECT_ID
-        elif os.getenv("GCP_PROJECT_ID"):
-            project_id = os.getenv("GCP_PROJECT_ID")
+        project_id = self.settings.gcp_project_id
 
         # 1. Upload original image to R2 for archival (if running on Worker)
-        if env and hasattr(env, "BUCKET"):
+        if self.storage:
             try:
-                import js
-                # Convert Python bytes to JS Uint8Array for Cloudflare R2 binding
-                js_bytes = js.Uint8Array.new(image_bytes)
-                await env.BUCKET.put(f"images/{file_id}.png", js_bytes)
-                logger.info(f"Uploaded image to R2: images/{file_id}.png")
+                await self.storage.upload_bytes(f"images/{file_id}.png", image_bytes)
             except Exception as e:
-                logger.error(f"Failed to upload image to R2: {e}")
+                logger.error(f"Failed to upload image to storage: {e}")
         else:
-            logger.info("R2 binding not available. Skipping image archival upload.")
+            logger.info("Storage interface not provided. Skipping image archival upload.")
 
         # 2. Analyze image with Gemini
         custom_prompt, facing_direction = await self._analyze_image(image_bytes, project_id, file_id, env)
@@ -74,20 +69,15 @@ class GeminiVeoProvider(AIProvider):
         facing_direction = "right"
 
         try:
-            api_key = None
-            if env and hasattr(env, "GEMINI_API_KEY"):
-                api_key = env.GEMINI_API_KEY
-            else:
-                api_key = os.getenv("GEMINI_API_KEY")
+            api_key = self.settings.gemini_api_key
 
             if api_key:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.settings.gemini_model_name}:generateContent?key={api_key}"
                 headers = {"Content-Type": "application/json"}
                 logger.info("Using Gemini API Key for analysis.")
             else:
-                # Fallback to Vertex AI if no API Key provided
-                url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-3.1-flash-lite:generateContent"
-                token = await get_access_token(env)
+                url = f"https://{self.settings.google_cloud_location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{self.settings.google_cloud_location}/publishers/google/models/{self.settings.gemini_model_name}:generateContent"
+                token = await get_access_token(self.settings, self.http_client, self.token_store)
                 headers = {
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {token}"
@@ -96,96 +86,71 @@ class GeminiVeoProvider(AIProvider):
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            from js import JSON, fetch
-            options = JSON.parse(json.dumps({
-                "method": "POST",
-                "headers": headers,
-                "body": json.dumps({
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [
-                                {"inline_data": {"mime_type": "image/png", "data": image_b64}},
-                                {"text": prompt_text}
-                            ]
-                        }
-                    ]
-                })
-            }))
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"inline_data": {"mime_type": "image/png", "data": image_b64}},
+                            {"text": prompt_text}
+                        ]
+                    }
+                ]
+            }
             
-            response = await fetch(url, options)
+            res_json = await self.http_client.post_json(url, headers, payload)
             
-            if response.status == 200:
-                res_json = (await response.json()).to_py()
-                text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
-                
-                if text.startswith("```"):
-                    text = text.split("```")[1]
-                    if text.startswith("json"):
-                        text = text[4:]
-                text = text.strip()
-                
-                result = json.loads(text)
-                custom_prompt = result.get("prompt", custom_prompt)
-                facing_direction = result.get("direction", facing_direction)
-                logger.info(f"Gemini generated prompt: {custom_prompt}, direction: {facing_direction}")
-            else:
-                resp_text = await response.text()
-                logger.warning(f"Gemini analysis failed with status {response.status}: {resp_text}, using default prompt.")
+            text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+            
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            text = text.strip()
+            
+            result = json.loads(text)
+            custom_prompt = result.get("prompt", custom_prompt)
+            facing_direction = result.get("direction", facing_direction)
+            logger.info(f"Gemini generated prompt: {custom_prompt}, direction: {facing_direction}")
         except Exception as e:
             logger.warning(f"Gemini analysis failed, using default prompt. Error: {e}")
 
         return custom_prompt, facing_direction
 
     async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
-        # Add negative prompt for audio to save money! (Using parentheses style as suggested by workarounds)
         custom_prompt += " (no background music), (no dialogue), (no ambient sound), silent video"
-
-        logger.info(
-            f"Submitting to Veo 3.1 Lite on Vertex AI: file_id={file_id}, aspect_ratio={aspect_ratio}"
-        )
+        logger.info(f"Submitting to Veo: file_id={file_id}, aspect_ratio={aspect_ratio}")
         
         try:
-            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/veo-3.1-lite-generate-001:predictLongRunning"
-            token = await get_access_token(env)
+            url = f"https://{self.settings.google_cloud_location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{self.settings.google_cloud_location}/publishers/google/models/{self.settings.veo_model_name}:predictLongRunning"
+            token = await get_access_token(self.settings, self.http_client, self.token_store)
             
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            from js import JSON, fetch
-            options = JSON.parse(json.dumps({
-                "method": "POST",
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {token}"
-                },
-                "body": json.dumps({
-                    "instances": [
-                        {
-                            "prompt": custom_prompt,
-                            "image": {
-                                "bytesBase64Encoded": image_b64,
-                                "mimeType": "image/png"
-                            }
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
+            }
+            payload = {
+                "instances": [
+                    {
+                        "prompt": custom_prompt,
+                        "image": {
+                            "bytesBase64Encoded": image_b64,
+                            "mimeType": "image/png"
                         }
-                    ],
-                    "parameters": {
-                        "aspectRatio": aspect_ratio,
-                        "durationSeconds": 4
                     }
-                })
-            }))
+                ],
+                "parameters": {
+                    "aspectRatio": aspect_ratio,
+                    "durationSeconds": 4
+                }
+            }
             
-            response = await fetch(url, options)
-            
-            if response.status == 200:
-                res_json = (await response.json()).to_py()
-                operation_name = res_json.get("name")
-                logger.info(f"Veo operation started: {operation_name}")
-                return operation_name
-            else:
-                resp_text = await response.text()
-                logger.error(f"Veo submission failed with status {response.status}: {resp_text}")
-                raise Exception(f"Veo submission failed with status {response.status}")
+            res_json = await self.http_client.post_json(url, headers, payload)
+            operation_name = res_json.get("name")
+            logger.info(f"Veo operation started: {operation_name}")
+            return operation_name
                     
         except Exception as e:
             logger.error(f"Failed to submit to Veo: {e}")
@@ -197,66 +162,39 @@ class GeminiVeoProvider(AIProvider):
         if provider_task_id.startswith("mock-"):
             return ProviderResult(status=ProviderStatus.FAILED, error="Ignoring old mock task in Gemini provider")
 
-        # Read Project ID
-        project_id = "project-68d02a87-0962-4fe5-a9a"  # Fallback
-        if env and hasattr(env, "GCP_PROJECT_ID"):
-            project_id = env.GCP_PROJECT_ID
-        elif os.getenv("GCP_PROJECT_ID"):
-            project_id = os.getenv("GCP_PROJECT_ID")
+        project_id = self.settings.gcp_project_id
 
         try:
-            # The provider_task_id returned by predictLongRunning includes the model publisher:
-            # projects/.../locations/us-central1/publishers/google/models/.../operations/...
-            # We must use the fetchPredictOperation RPC on the model resource
             parts = provider_task_id.rpartition('/operations/')
             if parts[1]:
                 resource_name = parts[0]
             else:
-                # Fallback to the provider_task_id if it's already stripped (unlikely)
                 resource_name = provider_task_id
             
-            # Poll the operation using the fetchPredictOperation URL
-            url = f"https://us-central1-aiplatform.googleapis.com/v1beta1/{resource_name}:fetchPredictOperation"
-            token = await get_access_token(env)
+            url = f"https://{self.settings.google_cloud_location}-aiplatform.googleapis.com/v1beta1/{resource_name}:fetchPredictOperation"
+            token = await get_access_token(self.settings, self.http_client, self.token_store)
             
-            from js import JSON, fetch
-            options = JSON.parse(json.dumps({
-                "method": "POST",
-                "headers": {
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json"
-                },
-                "body": json.dumps({
-                    "operationName": provider_task_id
-                })
-            }))
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "operationName": provider_task_id
+            }
             
-            response = await fetch(url, options)
-            
-            if response.status != 200:
-                resp_text = await response.text()
-                logger.error(f"Failed to poll Veo operation: {response.status} - {resp_text}")
-                return ProviderResult(status=ProviderStatus.PROCESSING)
-            
-            res_json = (await response.json()).to_py()
+            res_json = await self.http_client.post_json(url, headers, payload)
                 
-            # Check if done
             done = res_json.get("done", False)
             logger.info(f"Veo status: done={done}, id={provider_task_id.split('/')[-1]}")
 
             if not done:
                 return ProviderResult(status=ProviderStatus.PROCESSING)
 
-            # Check for error
             if "error" in res_json:
                 logger.error(f"Veo operation error: {res_json['error']}")
                 return ProviderResult(status=ProviderStatus.FAILED, error=str(res_json["error"]))
 
-            # Operation is done and successful!
-            # Since we didn't use storage URI, the bytes should be in the response!
             resp_obj = res_json.get("response", {})
-            
-            # The format for Vertex AI predictLongRunning usually has `generatedVideos`
             video_bytes = None
             try:
                 videos = resp_obj.get("generatedVideos", [])
@@ -264,7 +202,6 @@ class GeminiVeoProvider(AIProvider):
                     videos = resp_obj.get("videos", [])
                     
                 if videos:
-                    # Try both formats: with or without "video" wrapper
                     video_b64 = videos[0].get("bytesBase64Encoded")
                     if not video_b64 and "video" in videos[0]:
                         video_b64 = videos[0]["video"].get("bytesBase64Encoded")
@@ -275,31 +212,25 @@ class GeminiVeoProvider(AIProvider):
                 logger.warning(f"Could not parse video bytes from response: {e}")
 
             if not video_bytes:
-                # Do not log the full resp_obj as it might contain huge data and exceed log limits
                 logger.error(f"No video bytes found in response. Available keys: {list(resp_obj.keys())}")
                 return ProviderResult(status=ProviderStatus.FAILED, error="No video bytes found in response")
 
-            # Upload to R2
             filename = f"{provider_task_id.split('/')[-1]}.mp4"
             r2_key = f"videos/{filename}"
 
-            if env and hasattr(env, "BUCKET"):
+            if self.storage:
                 try:
-                    # Cloudflare R2 binding
-                    import js
-                    js_bytes = js.Uint8Array.new(video_bytes)
-                    await env.BUCKET.put(r2_key, js_bytes)
-                    logger.info(f"Uploaded video to R2: {r2_key}")
+                    await self.storage.upload_bytes(r2_key, video_bytes)
                 except Exception as e:
-                    logger.error(f"Failed to upload video to R2: {e}")
+                    logger.error(f"Failed to upload video to storage: {e}")
                     return ProviderResult(status=ProviderStatus.FAILED, error="Failed to upload video to R2")
             else:
-                logger.info("R2 binding not available. Saving to local file for testing.")
+                logger.info("Storage interface not available. Saving to local file for testing.")
                 os.makedirs("videos", exist_ok=True)
                 with open(f"videos/{filename}", "wb") as f:
                     f.write(video_bytes)
 
-            r2_public_url = os.getenv("R2_PUBLIC_URL", "https://media.hissnake.com").rstrip("/")
+            r2_public_url = self.settings.r2_public_url.rstrip("/")
             video_url = f"{r2_public_url}/{r2_key}"
             logger.info(f"Video ready at: {video_url}")
             

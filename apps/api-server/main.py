@@ -7,10 +7,14 @@ from typing import List
 
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.db.repository import ArtworkRepository
 from app.providers import AIProvider, MockProvider, GeminiVeoProvider, ProviderStatus
 from app.schemas import UploadRequest, UploadResponse, GalleryItem
+from app.core.config import Settings
+from app.interfaces.storage import CloudflareR2Storage
+from app.interfaces.http_client import JsFetchClient
 
 class ConsoleHandler(logging.Handler):
     def emit(self, record):
@@ -35,11 +39,21 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Paper Spells API")
 
-@app.options("/{path:path}")
-async def options_handler():
-    return {"status": "ok"}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Internal error: {type(exc).__name__}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected internal server error occurred."}
+    )
 
 # Provider map
 _provider_map: dict[str, type[AIProvider]] = {
@@ -56,16 +70,18 @@ async def get_repo(request: Request) -> ArtworkRepository:
         return ArtworkRepository(request.scope["env"].DB)
     raise HTTPException(status_code=500, detail="D1 database binding not available")
 
-async def get_provider(request: Request) -> AIProvider:
-    provider_name = "mock"
+async def get_settings(request: Request) -> Settings:
+    env = request.scope.get("env", None)
+    return Settings.from_env(env)
 
-    if "env" in request.scope and hasattr(request.scope["env"], "AI_PROVIDER"):
-        provider_name = request.scope["env"].AI_PROVIDER
-    else:
-        provider_name = os.getenv("AI_PROVIDER", "mock")
-
-    provider_cls = _provider_map.get(provider_name, MockProvider)
-    return provider_cls()
+async def get_provider(request: Request, settings: Settings = Depends(get_settings)) -> AIProvider:
+    env = request.scope.get("env", None)
+    http_client = JsFetchClient()
+    storage = CloudflareR2Storage(env.BUCKET) if env and hasattr(env, "BUCKET") else None
+    
+    if settings.ai_provider == "gemini":
+        return GeminiVeoProvider(settings=settings, http_client=http_client, storage=storage)
+    return MockProvider()
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -148,6 +164,3 @@ class Default(WorkerEntrypoint):
     async def fetch(self, request):
         import asgi
         return await asgi.fetch(app, request.js_object, self.env)
-
-
-
