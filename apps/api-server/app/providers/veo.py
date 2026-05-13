@@ -115,8 +115,8 @@ class GeminiVeoProvider(AIProvider):
         except Exception as e:
             logger.warning(f"Gemini analysis failed, using default prompt. Error: {e}")
 
-        # Add negative prompt for audio to save money!
-        custom_prompt += ", silent video, no sound, no audio track, no background music"
+        # Add negative prompt for audio to save money! (Using parentheses style as suggested by workarounds)
+        custom_prompt += " (no background music), (no dialogue), (no ambient sound), silent video"
 
         # 3. Submit to Veo 3.1 Lite (via predictLongRunning on Vertex AI)
         logger.info(
