@@ -239,15 +239,23 @@ class GeminiVeoProvider(AIProvider):
             video_bytes = None
             try:
                 videos = resp_obj.get("generatedVideos", [])
+                if not videos:
+                    videos = resp_obj.get("videos", [])
+                    
                 if videos:
-                    video_b64 = videos[0]["video"].get("bytesBase64Encoded")
+                    # Try both formats: with or without "video" wrapper
+                    video_b64 = videos[0].get("bytesBase64Encoded")
+                    if not video_b64 and "video" in videos[0]:
+                        video_b64 = videos[0]["video"].get("bytesBase64Encoded")
+                        
                     if video_b64:
                         video_bytes = base64.b64decode(video_b64)
             except Exception as e:
                 logger.warning(f"Could not parse video bytes from response: {e}")
 
             if not video_bytes:
-                logger.error(f"No video bytes found in response: {resp_obj}")
+                # Do not log the full resp_obj as it might contain huge data and exceed log limits
+                logger.error(f"No video bytes found in response. Available keys: {list(resp_obj.keys())}")
                 return ProviderResult(status=ProviderStatus.FAILED, error="No video bytes found in response")
 
             # Upload to R2
