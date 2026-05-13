@@ -265,7 +265,9 @@ class GeminiVeoProvider(AIProvider):
             if env and hasattr(env, "BUCKET"):
                 try:
                     # Cloudflare R2 binding
-                    await env.BUCKET.put(r2_key, video_bytes)
+                    import js
+                    js_bytes = js.Uint8Array.new(video_bytes)
+                    await env.BUCKET.put(r2_key, js_bytes)
                     logger.info(f"Uploaded video to R2: {r2_key}")
                 except Exception as e:
                     logger.error(f"Failed to upload video to R2: {e}")

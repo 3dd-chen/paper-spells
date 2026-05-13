@@ -12,10 +12,25 @@ from app.db.repository import ArtworkRepository
 from app.providers import AIProvider, MockProvider, GeminiVeoProvider, ProviderStatus
 from app.schemas import UploadRequest, UploadResponse, GalleryItem
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+class ConsoleHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            import js
+            msg = self.format(record)
+            if record.levelno >= logging.ERROR:
+                js.console.error(msg)
+            elif record.levelno >= logging.WARNING:
+                js.console.warn(msg)
+            else:
+                js.console.log(msg)
+        except:
+            import sys
+            print(self.format(record), file=sys.stderr)
+
+handler = ConsoleHandler()
+handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.getLogger().addHandler(handler)
+logging.getLogger().setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Paper Spells API")
