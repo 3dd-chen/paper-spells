@@ -1,55 +1,19 @@
-import { useState, type ChangeEvent } from 'react';
 import { Upload, Loader2 } from 'lucide-react';
+import { Toaster } from 'sonner';
 import { UploadZone } from './components/UploadZone';
 import { SuccessScreen } from './components/SuccessScreen';
-import { processImageForUpload } from './hooks/useImageProcessor';
-import { submitArtwork } from './lib/api';
+import { useArtworkUpload } from './hooks/useArtworkUpload';
 
 export default function App() {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [processedImage, setProcessedImage] = useState<string | null>(null);
-  const [aspectRatio, setAspectRatio] = useState('16:9');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const { status, imageSrc, processedImage, handleFileSelect, handleUpload } = useArtworkUpload();
 
-  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsProcessing(true);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const src = event.target?.result as string;
-      setImageSrc(src);
-      try {
-        const result = await processImageForUpload(src);
-        setProcessedImage(result.dataUrl);
-        setAspectRatio(result.aspectRatio);
-      } catch (err) {
-        console.error('Error processing image:', err);
-      } finally {
-        setIsProcessing(false);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleUpload = async () => {
-    if (!processedImage) return;
-    setIsUploading(true);
-    try {
-      await submitArtwork(processedImage, aspectRatio);
-      setIsSubmitted(true);
-    } catch (err) {
-      console.error('Upload error:', err);
-    } finally {
-      setIsUploading(false);
-    }
-  };
+  const isProcessing = status === 'processing';
+  const isUploading = status === 'uploading';
+  const isSubmitted = status === 'success';
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-rose-50 to-pink-100 flex flex-col items-center justify-center p-6 text-slate-800">
+      <Toaster position="top-center" richColors />
       <div className="max-w-md w-full bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/50 p-8 space-y-8">
 
         <div className="text-center space-y-2">
