@@ -9,7 +9,8 @@ export function resolveVideoUrl(raw: string): string {
 
   // If the URL contains our media domain (possibly stored without scheme),
   // rewrite to a proper https:// URL starting at the /videos path.
-  if (MEDIA_BASE && raw.includes(MEDIA_BASE)) {
+  // ONLY do this in development to use Vite proxy. In production, use the absolute URL.
+  if (import.meta.env.DEV && MEDIA_BASE && raw.includes(MEDIA_BASE)) {
     const idx = raw.indexOf('/videos');
     if (idx !== -1) {
       // Return relative path to use Vite proxy (/videos/...)
