@@ -81,12 +81,12 @@ class GeminiVeoProvider(AIProvider):
                 api_key = os.getenv("GEMINI_API_KEY")
 
             if api_key:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={api_key}"
                 headers = {"Content-Type": "application/json"}
                 logger.info("Using Gemini API Key for analysis.")
             else:
                 # Fallback to Vertex AI if no API Key provided
-                url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite:generateContent"
+                url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-3.1-flash-lite:generateContent"
                 token = await get_access_token(env)
                 headers = {
                     "Content-Type": "application/json",
