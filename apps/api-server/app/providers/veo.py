@@ -118,8 +118,8 @@ class GeminiVeoProvider(AIProvider):
         return custom_prompt, facing_direction
 
     async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
-        # Enforce that Veo uses the input image as the exact starting frame, generates no audio, and does not change the character's facing direction.
-        custom_prompt += ". The animation MUST start seamlessly from the provided image as the exact first frame. Smooth, continuous motion. The character MUST NOT turn around or change its facing direction throughout the entire video. SILENT VIDEO, NO AUDIO, NO SOUND EFFECTS, NO MUSIC, MUTED."
+        # Enforce that Veo uses the input image as the exact starting frame.
+        custom_prompt += ". The animation MUST start seamlessly from the provided image as the exact first frame. Smooth, continuous motion."
         logger.info(f"Submitting to Veo: file_id={file_id}, aspect_ratio={aspect_ratio}")
         
         try:
@@ -151,7 +151,9 @@ class GeminiVeoProvider(AIProvider):
                     "aspectRatio": aspect_ratio,
                     "durationSeconds": 4,
                     "includeAudio": False,
-                    "personGeneration": "ALLOW_ALL"
+                    "resolution": "720p",
+                    "fps": 24,
+                    "negativePrompt": "turning around, spinning, looking backwards, changing facing direction, 3d render, camera movement, audio, sound, speech, photorealistic"
                 }
             }
             
