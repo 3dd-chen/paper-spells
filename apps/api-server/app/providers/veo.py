@@ -38,8 +38,10 @@ class GeminiVeoProvider(AIProvider):
         # 1. Upload original image to R2 for archival (if running on Worker)
         if env and hasattr(env, "BUCKET"):
             try:
-                # Cloudflare R2 binding
-                await env.BUCKET.put(f"images/{file_id}.png", image_bytes)
+                import js
+                # Convert Python bytes to JS Uint8Array for Cloudflare R2 binding
+                js_bytes = js.Uint8Array.new(image_bytes)
+                await env.BUCKET.put(f"images/{file_id}.png", js_bytes)
                 logger.info(f"Uploaded image to R2: images/{file_id}.png")
             except Exception as e:
                 logger.error(f"Failed to upload image to R2: {e}")
