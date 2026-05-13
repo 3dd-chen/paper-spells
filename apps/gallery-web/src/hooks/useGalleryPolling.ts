@@ -6,7 +6,7 @@ const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export function useGalleryPolling() {
   const { data, error } = useSWR<GalleryItem[]>(`${API_URL}/api/gallery`, fetcher, {
-    refreshInterval: 15000, // 每 15 秒輪詢一次
+    refreshInterval: 20000, // 每 20 秒輪詢一次
     revalidateOnFocus: false, // 畫面是靜態展示，不需要在視窗切換時頻繁觸發更新
   });
 
