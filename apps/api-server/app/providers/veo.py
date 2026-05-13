@@ -136,15 +136,22 @@ class GeminiVeoProvider(AIProvider):
                 "instances": [
                     {
                         "prompt": custom_prompt,
-                        "image": {
-                            "bytesBase64Encoded": image_b64,
-                            "mimeType": "image/png"
-                        }
+                        "referenceImages": [
+                            {
+                                "referenceType": "IMAGE_REFERENCE_TYPE_START_FRAME",
+                                "image": {
+                                    "bytesBase64Encoded": image_b64,
+                                    "mimeType": "image/png"
+                                }
+                            }
+                        ]
                     }
                 ],
                 "parameters": {
                     "aspectRatio": aspect_ratio,
-                    "durationSeconds": 4
+                    "durationSeconds": 4,
+                    "includeAudio": False,
+                    "personGeneration": "ALLOW_ALL"
                 }
             }
             
