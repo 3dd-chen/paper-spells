@@ -6,6 +6,4 @@ tests/
 test_*.py
 .python-version
 node_modules/
-python_modules/
-python_modules
 

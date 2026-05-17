@@ -2,49 +2,12 @@ name = "paper-spells-api"
 main = "main.py"
 compatibility_date = "2025-11-02"
 compatibility_flags = ["python_workers", "python_dedicated_snapshot"]
-exclude = [
-    "tests/**",
-    "scripts/**",
-    ".venv/**",
-    ".venv-workers/**",
-    "python_modules/**",
-    ".pytest_cache/**",
-    "__pycache__/**",
-    "*.db",
-    "Dockerfile",
-    "README.md",
-    "pyproject.toml",
-    "uv.lock",
-    ".env"
-]
-
 [vars]
 AI_PROVIDER = "gemini"
 GCP_PROJECT_ID = "project-68d02a87-0962-4fe5-a9a"
 GOOGLE_CLOUD_LOCATION = "us-central1"
 GOOGLE_GENAI_USE_VERTEXAI = "true"
 
-
-# Pywrangler specific exclude!
-[python_modules]
-excludes = [
-    "tests/",
-    "scripts/",
-    ".venv/",
-    ".venv-workers/",
-    ".pytest_cache/",
-    "__pycache__/",
-    "Dockerfile",
-    "README.md",
-    "pyproject.toml",
-    "uv.lock",
-    ".env",
-    # Large unnecessary packages
-    "pygments/",
-    "idna/uts46data.py",
-    "rich/",
-    "click/"
-]
 
 [[d1_databases]]
 binding = "DB"
