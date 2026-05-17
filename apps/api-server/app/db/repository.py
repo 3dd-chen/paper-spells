@@ -62,7 +62,9 @@ class ArtworkRepository:
         return result.results.to_py()
 
     async def get_all_completed(self, room_id: str) -> List[dict]:
-        result = await self.db.prepare(f"SELECT * FROM artworks WHERE status = '{ArtworkStatus.COMPLETED.value}' AND room_id = ? AND hidden = 0 ORDER BY created_at DESC").bind(room_id).all()
+        result = await self.db.prepare(
+            f"SELECT * FROM artworks WHERE (status = '{ArtworkStatus.COMPLETED.value}' OR status = 'ready') AND room_id = ? AND hidden = 0 ORDER BY created_at DESC"
+        ).bind(room_id).all()
         return result.results.to_py()
 
     async def get_all_rooms(self) -> List[dict]:

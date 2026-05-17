@@ -69,15 +69,15 @@ export async function getRoomArtworks(roomId: string): Promise<AdminArtwork[]> {
 }
 
 export async function hideArtwork(id: string): Promise<void> {
-  await adminFetch(`/api/admin/artworks/${id}/hide`, { method: 'PATCH' });
+  await adminFetch(`/api/admin/artworks/${id}/hide`, { method: 'POST' });
 }
 
 export async function unhideArtwork(id: string): Promise<void> {
-  await adminFetch(`/api/admin/artworks/${id}/unhide`, { method: 'PATCH' });
+  await adminFetch(`/api/admin/artworks/${id}/unhide`, { method: 'POST' });
 }
 
 export async function deleteArtwork(id: string): Promise<void> {
-  const res = await adminFetch(`/api/admin/artworks/${id}`, { method: 'DELETE' });
+  const res = await adminFetch(`/api/admin/artworks/${id}/delete`, { method: 'POST' });
   if (!res.ok) throw new Error('Delete failed');
 }
 

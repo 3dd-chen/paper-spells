@@ -248,7 +248,7 @@ async def admin_get_room(
     return [to_item(a) for a in artworks]
 
 
-@app.patch("/api/admin/artworks/{artwork_id}/hide")
+@app.post("/api/admin/artworks/{artwork_id}/hide")
 async def admin_hide_artwork(
     artwork_id: str,
     repo: ArtworkRepository = Depends(get_repo),
@@ -258,7 +258,7 @@ async def admin_hide_artwork(
     return {"status": "hidden"}
 
 
-@app.patch("/api/admin/artworks/{artwork_id}/unhide")
+@app.post("/api/admin/artworks/{artwork_id}/unhide")
 async def admin_unhide_artwork(
     artwork_id: str,
     repo: ArtworkRepository = Depends(get_repo),
@@ -268,7 +268,7 @@ async def admin_unhide_artwork(
     return {"status": "visible"}
 
 
-@app.delete("/api/admin/artworks/{artwork_id}")
+@app.post("/api/admin/artworks/{artwork_id}/delete")
 async def admin_delete_artwork(
     artwork_id: str,
     request: Request,
