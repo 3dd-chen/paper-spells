@@ -45,13 +45,10 @@ function ChromaImage({ src }: { src: string }) {
   );
 
   return (
-    // Absolute wrapper gives canvas a concrete width+height to compute % against
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <canvas
-        ref={canvasRef}
-        style={{ maxWidth: '100%', maxHeight: '100%' }}
-      />
-    </div>
+    <canvas
+      ref={canvasRef}
+      style={{ display: 'block', position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+    />
   );
 }
 

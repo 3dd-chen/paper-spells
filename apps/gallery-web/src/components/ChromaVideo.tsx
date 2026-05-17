@@ -84,7 +84,7 @@ export function ChromaVideo({ src }: ChromaVideoProps) {
         crossOrigin="anonymous"
         style={{ display: 'none' }}
       />
-      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 'auto' }} />
+      <canvas ref={canvasRef} style={{ display: 'block', position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
     </>
   );
 }

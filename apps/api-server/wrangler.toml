@@ -2,15 +2,6 @@ name = "paper-spells-api"
 main = "main.py"
 compatibility_date = "2025-11-02"
 compatibility_flags = ["python_workers", "python_dedicated_snapshot"]
-
-[vars]
-AI_PROVIDER = "gemini"
-GCP_PROJECT_ID = "project-68d02a87-0962-4fe5-a9a"
-GOOGLE_CLOUD_LOCATION = "us-central1"
-GOOGLE_GENAI_USE_VERTEXAI = "true"
-
-
-# General Wrangler exclude
 exclude = [
     "tests/**",
     "scripts/**",
@@ -26,6 +17,13 @@ exclude = [
     "uv.lock",
     ".env"
 ]
+
+[vars]
+AI_PROVIDER = "gemini"
+GCP_PROJECT_ID = "project-68d02a87-0962-4fe5-a9a"
+GOOGLE_CLOUD_LOCATION = "us-central1"
+GOOGLE_GENAI_USE_VERTEXAI = "true"
+
 
 # Pywrangler specific exclude!
 [python_modules]
