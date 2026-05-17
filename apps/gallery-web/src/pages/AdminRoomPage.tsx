@@ -38,13 +38,20 @@ function ChromaImage({ src }: { src: string }) {
     img.onerror = () => setFailed(true);
   }, [src]);
 
-  if (failed) return <div className="w-full h-full flex items-center justify-center text-slate-300 text-xs">Image error</div>;
+  if (failed) return (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span className="text-slate-300 text-xs">Image error</span>
+    </div>
+  );
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }}
-    />
+    // Absolute wrapper gives canvas a concrete width+height to compute % against
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <canvas
+        ref={canvasRef}
+        style={{ maxWidth: '100%', maxHeight: '100%' }}
+      />
+    </div>
   );
 }
 
