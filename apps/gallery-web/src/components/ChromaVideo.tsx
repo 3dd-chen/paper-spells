@@ -19,7 +19,7 @@ export function ChromaVideo({ src }: ChromaVideoProps) {
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
     let animationId: number;

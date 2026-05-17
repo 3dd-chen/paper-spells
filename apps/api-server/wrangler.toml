@@ -40,7 +40,12 @@ excludes = [
     "README.md",
     "pyproject.toml",
     "uv.lock",
-    ".env"
+    ".env",
+    # Large unnecessary packages
+    "pygments/",
+    "idna/uts46data.py",
+    "rich/",
+    "click/"
 ]
 
 [[d1_databases]]
