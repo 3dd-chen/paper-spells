@@ -7,11 +7,12 @@ const API_URL = import.meta.env.VITE_API_BASE_URL as string ?? '';
 export async function submitArtwork(
   imageData: string,
   aspectRatio: string,
+  roomId: string,
 ): Promise<{ task_id: string; status: string }> {
   const res = await fetch(`${API_URL}/api/upload`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_data: imageData, aspect_ratio: aspectRatio }),
+    body: JSON.stringify({ image_data: imageData, aspect_ratio: aspectRatio, room_id: roomId }),
   });
 
   if (!res.ok) {

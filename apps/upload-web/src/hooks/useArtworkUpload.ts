@@ -9,6 +9,8 @@ export function useArtworkUpload() {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState('16:9');
+  
+  const roomId = new URLSearchParams(window.location.search).get('room');
 
   const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,10 +41,10 @@ export function useArtworkUpload() {
   };
 
   const handleUpload = async () => {
-    if (!processedImage) return;
+    if (!processedImage || !roomId) return;
     setStatus('uploading');
     try {
-      await submitArtwork(processedImage, aspectRatio);
+      await submitArtwork(processedImage, aspectRatio, roomId);
       setStatus('success');
       toast.success('Artwork animated successfully!');
     } catch (err: unknown) {

@@ -99,7 +99,7 @@ async def upload_artwork(
         raise HTTPException(status_code=400, detail="Invalid Base64 image data")
 
     file_id = str(uuid.uuid4())
-    artwork = await repo.create_artwork(image_path=f"images/{file_id}.png")
+    artwork = await repo.create_artwork(image_path=f"images/{file_id}.png", room_id=req.room_id)
 
     try:
         env = request.scope.get("env", None)
@@ -121,10 +121,11 @@ async def upload_artwork(
 @app.get("/api/gallery")
 async def get_gallery(
     request: Request,
+    room_id: str = "default",
     repo: ArtworkRepository = Depends(get_repo),
     provider: AIProvider = Depends(get_provider),
 ) -> List[GalleryItem]:
-    generating = await repo.get_all_generating()
+    generating = await repo.get_all_generating(room_id)
     env = request.scope.get("env", None)
 
     for artwork in generating:
@@ -139,7 +140,7 @@ async def get_gallery(
         except Exception as e:
             logger.error(f"[gallery] Error checking status for {artwork['id']}: {e}")
 
-    completed = await repo.get_all_completed()
+    completed = await repo.get_all_completed(room_id)
     return [
         GalleryItem(
             id=a["id"],

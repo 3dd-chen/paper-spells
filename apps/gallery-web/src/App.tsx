@@ -3,9 +3,12 @@ import { useGalleryPolling } from './hooks/useGalleryPolling';
 import { usePhysicsEngine } from './hooks/usePhysicsEngine';
 import { ChromaVideo } from './components/ChromaVideo';
 import { Header } from './components/Header';
+import { RoomLobby } from './components/RoomLobby';
 import { resolveVideoUrl } from './lib/videoUrl';
 
 export default function App() {
+  const roomId = new URLSearchParams(window.location.search).get('room');
+  
   const { videos, isLoaded } = useGalleryPolling();
   const [food, setFood] = useState<{ x: number; y: number; id: number } | null>(null);
   const { instancesRef, foodRef, initInstance } = usePhysicsEngine(() => setFood(null));
@@ -23,6 +26,10 @@ export default function App() {
       v.play().catch(() => {}),
     );
   };
+
+  if (!roomId) {
+    return <RoomLobby />;
+  }
 
   return (
     <div
@@ -89,7 +96,7 @@ export default function App() {
         </div>
       )}
 
-      <Header spellCount={videos.length} isLoaded={isLoaded} />
+      <Header spellCount={videos.length} isLoaded={isLoaded} roomId={roomId} />
     </div>
   );
 }

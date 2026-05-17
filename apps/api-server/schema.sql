@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS artworks (
     id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
     image_path TEXT,
     video_url TEXT,
     status TEXT DEFAULT 'pending',

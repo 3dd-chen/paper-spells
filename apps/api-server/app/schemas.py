@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 
 class UploadRequest(BaseModel):
+    room_id: str
     image_data: str          # Base64-encoded image (with or without data-URI prefix)
     aspect_ratio: Optional[str] = "16:9"
 

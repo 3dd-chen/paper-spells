@@ -1,9 +1,10 @@
 interface HeaderProps {
   spellCount: number;
   isLoaded: boolean;
+  roomId?: string;
 }
 
-export function Header({ spellCount, isLoaded }: HeaderProps) {
+export function Header({ spellCount, isLoaded, roomId }: HeaderProps) {
   return (
     <div className="ui-container absolute top-0 left-0 w-full p-6 pointer-events-none flex justify-between items-start">
       <div className="pointer-events-auto">
@@ -17,6 +18,11 @@ export function Header({ spellCount, isLoaded }: HeaderProps) {
         >
           Paper Spells
         </h1>
+        {roomId && (
+          <div className="mt-1 inline-block bg-pink-100 text-pink-600 px-2 py-0.5 rounded-md text-xs font-semibold uppercase tracking-wider border border-pink-200">
+            Room: {roomId}
+          </div>
+        )}
         <p style={{ color: '#9d174d', fontSize: 14, marginTop: 4, opacity: 0.8 }}>
           {spellCount} {spellCount === 1 ? 'spell' : 'spells'} alive • Click to feed!
         </p>

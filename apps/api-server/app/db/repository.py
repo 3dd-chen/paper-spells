@@ -13,14 +13,15 @@ class ArtworkRepository:
     def __init__(self, db):
         self.db = db
 
-    async def create_artwork(self, image_path: str) -> dict:
+    async def create_artwork(self, image_path: str, room_id: str) -> dict:
         task_id = str(uuid.uuid4())
         await self.db.prepare(
-            "INSERT INTO artworks (id, image_path, status) VALUES (?, ?, ?)"
-        ).bind(task_id, image_path, ArtworkStatus.PENDING.value).run()
+            "INSERT INTO artworks (id, room_id, image_path, status) VALUES (?, ?, ?, ?)"
+        ).bind(task_id, room_id, image_path, ArtworkStatus.PENDING.value).run()
         
         return {
             "id": task_id,
+            "room_id": room_id,
             "image_path": image_path,
             "status": ArtworkStatus.PENDING.value
         }
@@ -53,10 +54,10 @@ class ArtworkRepository:
         ).bind(ArtworkStatus.FAILED.value, task_id).run()
         return True
 
-    async def get_all_generating(self) -> List[dict]:
-        result = await self.db.prepare(f"SELECT * FROM artworks WHERE status = '{ArtworkStatus.GENERATING.value}'").all()
+    async def get_all_generating(self, room_id: str) -> List[dict]:
+        result = await self.db.prepare(f"SELECT * FROM artworks WHERE status = '{ArtworkStatus.GENERATING.value}' AND room_id = ?").bind(room_id).all()
         return result.results.to_py()
 
-    async def get_all_completed(self) -> List[dict]:
-        result = await self.db.prepare(f"SELECT * FROM artworks WHERE status = '{ArtworkStatus.COMPLETED.value}' ORDER BY created_at DESC").all()
+    async def get_all_completed(self, room_id: str) -> List[dict]:
+        result = await self.db.prepare(f"SELECT * FROM artworks WHERE status = '{ArtworkStatus.COMPLETED.value}' AND room_id = ? ORDER BY created_at DESC").bind(room_id).all()
         return result.results.to_py()

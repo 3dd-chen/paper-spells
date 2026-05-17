@@ -2,6 +2,7 @@ import { Upload, Loader2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { UploadZone } from './components/UploadZone';
 import { SuccessScreen } from './components/SuccessScreen';
+import { RoomLobby } from './components/RoomLobby';
 import { useArtworkUpload } from './hooks/useArtworkUpload';
 
 export default function App() {
@@ -10,6 +11,12 @@ export default function App() {
   const isProcessing = status === 'processing';
   const isUploading = status === 'uploading';
   const isSubmitted = status === 'success';
+
+  const roomId = new URLSearchParams(window.location.search).get('room');
+
+  if (!roomId) {
+    return <RoomLobby />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-rose-50 to-pink-100 flex flex-col items-center justify-center p-6 text-slate-800">
