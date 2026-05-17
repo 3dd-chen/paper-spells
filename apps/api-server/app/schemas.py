@@ -22,3 +22,29 @@ class GalleryItem(BaseModel):
     video_url: Optional[str] = None
     image_path: Optional[str] = None
     facing_direction: Optional[str] = None
+
+
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AdminLoginResponse(BaseModel):
+    token: str
+    expires_at: int
+
+
+class AdminArtworkItem(BaseModel):
+    id: str
+    room_id: str
+    status: str
+    hidden: int = 0
+    video_url: Optional[str] = None
+    image_path: Optional[str] = None
+    facing_direction: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class AdminRoomItem(BaseModel):
+    room_id: str
+    count: int

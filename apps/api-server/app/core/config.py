@@ -13,6 +13,7 @@ class Settings:
     gemini_model_name: str
     r2_public_url: str
     cors_allowed_origins: str
+    jwt_secret: str
     
     @classmethod
     def from_env(cls, env: Any) -> Settings:
@@ -26,4 +27,5 @@ class Settings:
             gemini_model_name=getattr(env, "GEMINI_MODEL_NAME", "gemini-3.1-flash-lite"),
             r2_public_url=getattr(env, "R2_PUBLIC_URL", "https://media.hissnake.com"),
             cors_allowed_origins=getattr(env, "CORS_ALLOWED_ORIGINS", "*"),
+            jwt_secret=getattr(env, "JWT_SECRET", "dev-secret-change-me"),
         )

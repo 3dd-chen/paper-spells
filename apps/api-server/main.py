@@ -9,12 +9,16 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.db.repository import ArtworkRepository
+from app.db.repository import ArtworkRepository, AdminRepository
 from app.providers import AIProvider, MockProvider, GeminiVeoProvider, ProviderStatus
-from app.schemas import UploadRequest, UploadResponse, GalleryItem
+from app.schemas import (
+    UploadRequest, UploadResponse, GalleryItem,
+    AdminLoginRequest, AdminLoginResponse, AdminArtworkItem, AdminRoomItem,
+)
 from app.core.config import Settings
 from app.interfaces.storage import CloudflareR2Storage
 from app.interfaces.http_client import JsFetchClient
+from app.auth import create_token, verify_token
 
 class ConsoleHandler(logging.Handler):
     def emit(self, record):
@@ -82,6 +86,18 @@ async def get_provider(request: Request, settings: Settings = Depends(get_settin
     if settings.ai_provider == "gemini":
         return GeminiVeoProvider(settings=settings, http_client=http_client, storage=storage)
     return MockProvider()
+
+async def get_admin_repo(request: Request) -> AdminRepository:
+    if "env" in request.scope and hasattr(request.scope["env"], "DB"):
+        return AdminRepository(request.scope["env"].DB)
+    raise HTTPException(status_code=500, detail="D1 database binding not available")
+
+async def require_admin(request: Request, settings: Settings = Depends(get_settings)):
+    auth = request.headers.get("Authorization", "")
+    token = auth.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+    return verify_token(token, settings.jwt_secret)
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -155,6 +171,96 @@ async def get_gallery(
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+# ── Admin Routes ─────────────────────────────────────────────────────────────
+
+@app.post("/api/admin/login", response_model=AdminLoginResponse)
+async def admin_login(
+    req: AdminLoginRequest,
+    admin_repo: AdminRepository = Depends(get_admin_repo),
+    settings: Settings = Depends(get_settings),
+):
+    import time
+    admin = await admin_repo.verify_credentials(req.username, req.password)
+    if not admin:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    expires_in = 86400  # 24 hours
+    token = create_token(admin["id"], settings.jwt_secret, expires_in)
+    return AdminLoginResponse(token=token, expires_at=int(time.time()) + expires_in)
+
+
+@app.post("/api/admin/logout")
+async def admin_logout(_=Depends(require_admin)):
+    return {"status": "ok"}
+
+
+@app.get("/api/admin/rooms", response_model=list[AdminRoomItem])
+async def admin_list_rooms(
+    repo: ArtworkRepository = Depends(get_repo),
+    _=Depends(require_admin),
+):
+    rooms = await repo.get_all_rooms()
+    return [AdminRoomItem(**r) for r in rooms]
+
+
+@app.get("/api/admin/rooms/{room_id}", response_model=list[AdminArtworkItem])
+async def admin_get_room(
+    room_id: str,
+    repo: ArtworkRepository = Depends(get_repo),
+    _=Depends(require_admin),
+):
+    artworks = await repo.get_artworks_by_room(room_id)
+    return [AdminArtworkItem(**a) for a in artworks]
+
+
+@app.patch("/api/admin/artworks/{artwork_id}/hide")
+async def admin_hide_artwork(
+    artwork_id: str,
+    repo: ArtworkRepository = Depends(get_repo),
+    _=Depends(require_admin),
+):
+    await repo.set_hidden(artwork_id, True)
+    return {"status": "hidden"}
+
+
+@app.patch("/api/admin/artworks/{artwork_id}/unhide")
+async def admin_unhide_artwork(
+    artwork_id: str,
+    repo: ArtworkRepository = Depends(get_repo),
+    _=Depends(require_admin),
+):
+    await repo.set_hidden(artwork_id, False)
+    return {"status": "visible"}
+
+
+@app.delete("/api/admin/artworks/{artwork_id}")
+async def admin_delete_artwork(
+    artwork_id: str,
+    request: Request,
+    repo: ArtworkRepository = Depends(get_repo),
+    _=Depends(require_admin),
+):
+    artwork = await repo.delete_artwork(artwork_id)
+    if not artwork:
+        raise HTTPException(status_code=404, detail="Artwork not found")
+
+    # Clean up R2 files
+    env = request.scope.get("env", None)
+    if env and hasattr(env, "BUCKET"):
+        storage = CloudflareR2Storage(env.BUCKET)
+        for key in [artwork.get("image_path"), artwork.get("video_url")]:
+            if key:
+                # Strip domain prefix if video_url is a full URL
+                if key.startswith("http"):
+                    from urllib.parse import urlparse
+                    key = urlparse(key).path.lstrip("/")
+                try:
+                    await storage.delete(key)
+                except Exception as e:
+                    logger.warning(f"[admin] Failed to delete R2 key {key}: {e}")
+
+    return {"status": "deleted"}
 
 
 # ── Cloudflare Worker Entrypoint ──────────────────────────────────────────────
