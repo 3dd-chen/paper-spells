@@ -211,7 +211,19 @@ async def admin_get_room(
     _=Depends(require_admin),
 ):
     artworks = await repo.get_artworks_by_room(room_id)
-    return [AdminArtworkItem(**a) for a in artworks]
+    def to_item(a: dict) -> AdminArtworkItem:
+        # D1 NULL values may not come back as Python None in Pydantic v1 — coerce explicitly
+        return AdminArtworkItem(
+            id=str(a.get("id", "")),
+            room_id=str(a.get("room_id", "")),
+            status=str(a.get("status", "")),
+            hidden=int(a.get("hidden") or 0),
+            video_url=str(a["video_url"]) if a.get("video_url") else None,
+            image_path=str(a["image_path"]) if a.get("image_path") else None,
+            facing_direction=str(a["facing_direction"]) if a.get("facing_direction") else None,
+            created_at=str(a["created_at"]) if a.get("created_at") else None,
+        )
+    return [to_item(a) for a in artworks]
 
 
 @app.patch("/api/admin/artworks/{artwork_id}/hide")
