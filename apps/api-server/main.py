@@ -136,7 +136,8 @@ async def upload_artwork(
         raise HTTPException(status_code=400, detail="Invalid Base64 image data")
 
     file_id = str(uuid.uuid4())
-    artwork = await repo.create_artwork(image_path=f"images/{file_id}.png", room_id=req.room_id)
+    r2_public_url = (await get_settings(request)).r2_public_url.rstrip("/")
+    artwork = await repo.create_artwork(image_path=f"{r2_public_url}/images/{file_id}.png", room_id=req.room_id)
 
     try:
         env = request.scope.get("env", None)
