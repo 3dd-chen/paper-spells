@@ -18,7 +18,11 @@ export function isTokenValid(): boolean {
   const token = getToken();
   if (!token) return false;
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    // JWT uses base64url (- and _ instead of + and /), atob needs standard base64
+    const base64 = token.split('.')[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const payload = JSON.parse(atob(base64));
     return payload.exp > Date.now() / 1000;
   } catch {
     return false;
