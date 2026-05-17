@@ -55,11 +55,14 @@ class GeminiVeoProvider(AIProvider):
         logger.info(f"Analyzing image with Gemini 2.5 Flash Lite on Vertex AI for artwork {file_id}")
         
         prompt_text = (
-            "Determine if the character or object is naturally facing 'left' or 'right'. If unclear, default to 'right'.\n"
-            "IMPORTANT: You MUST include the detected direction in the generated 'prompt' (e.g., 'facing left', 'moving to the left') so that Veo generates the video in the correct orientation matching the original drawing!\n"
-            "Return ONLY a JSON object with the following keys:\n"
+            "Analyze this image. Determine if the main character or object is naturally facing 'left' or 'right'. If unclear, default to 'right'.\n"
+            "IMPORTANT RULES:\n"
+            "1. The 'prompt' MUST explicitly state the facing direction AND movement direction (e.g., 'facing left, moving left').\n"
+            "2. The 'prompt' MUST include: 'no text, no watermarks, no captions, no letters'.\n"
+            "3. Keep the prompt to 15-25 words total.\n"
+            "Return ONLY a JSON object with these exact keys:\n"
             "{\n"
-            "  \"prompt\": \"The final prompt for the video generator (15-25 words), explicitly stating the direction\",\n"
+            "  \"prompt\": \"The final prompt for Veo, explicitly stating direction and no-text requirement\",\n"
             "  \"direction\": \"left\" or \"right\"\n"
             "}\n"
             "Do not include markdown code blocks or any other text."
@@ -118,9 +121,15 @@ class GeminiVeoProvider(AIProvider):
         return custom_prompt, facing_direction
 
     async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
-        # Enforce that Veo uses the input image as the exact starting frame.
-        custom_prompt += ". The animation MUST start seamlessly from the provided image as the exact first frame. Smooth, continuous motion."
-        logger.info(f"Submitting to Veo: file_id={file_id}, aspect_ratio={aspect_ratio}")
+        # Reinforce direction + clean output in the final prompt
+        direction_hint = "facing left, moving left" if "left" in custom_prompt.lower() else "facing right, moving right"
+        custom_prompt = (
+            f"{custom_prompt}. "
+            f"Character consistently {direction_hint} throughout entire video, never turning around. "
+            "No text, no watermarks, no captions. "
+            "Animation starts seamlessly from the provided image as the exact first frame. Smooth motion."
+        )
+        logger.info(f"Final Veo prompt: {custom_prompt}")
         
         try:
             url = f"https://{self.settings.google_cloud_location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{self.settings.google_cloud_location}/publishers/google/models/{self.settings.veo_model_name}:predictLongRunning"
@@ -148,7 +157,12 @@ class GeminiVeoProvider(AIProvider):
                     "includeAudio": False,
                     "resolution": "720p",
                     "fps": 24,
-                    "negativePrompt": "turning around, spinning, looking backwards, changing facing direction, 3d render, camera movement, audio, sound, speech, photorealistic, style change, character redesign"
+                    "negativePrompt": (
+                        "turning around, spinning, looking backwards, changing facing direction, "
+                        "text, watermark, caption, letters, numbers, subtitle, signature, logo, "
+                        "3d render, camera movement, audio, sound, speech, photorealistic, "
+                        "style change, character redesign"
+                    )
                 }
             }
             
