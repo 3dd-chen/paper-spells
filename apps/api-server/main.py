@@ -43,11 +43,32 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Paper Spells API")
 
+@app.on_event("startup")
+async def _configure_cors():
+    pass
+
+def _get_cors_origins(settings: Settings) -> list[str]:
+    raw = settings.cors_allowed_origins
+    if not raw or raw == "*":
+        # Fallback to known origins if wildcard is set with credentials
+        return [
+            "https://gallery.hissnake.com",
+            "https://upload.hissnake.com",
+            "http://localhost:5173",
+            "http://localhost:4173",
+        ]
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://gallery.hissnake.com",
+        "https://upload.hissnake.com",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
