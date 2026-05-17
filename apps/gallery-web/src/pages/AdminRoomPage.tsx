@@ -4,6 +4,17 @@ import { getRoomArtworks, hideArtwork, unhideArtwork, deleteArtwork, type AdminA
 import { resolveVideoUrl } from '../lib/videoUrl';
 import { ChromaVideo } from '../components/ChromaVideo';
 
+// Resolves R2 asset paths (relative like 'images/xxx.png' OR full domain without scheme)
+function resolveAssetUrl(path?: string): string {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  // path could be 'images/xxx.png' (R2 relative) or 'media.hissnake.com/...' (no scheme)
+  if (path.startsWith('media.hissnake.com') || path.startsWith('videos/') || path.startsWith('images/')) {
+    return `https://media.hissnake.com/${path.replace(/^media\.hissnake\.com\//, '')}`;
+  }
+  return `https://media.hissnake.com/${path}`;
+}
+
 // ── ChromaImage: canvas-based chroma key for static images ──────────────────
 function ChromaImage({ src }: { src: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -17,16 +28,18 @@ function ChromaImage({ src }: { src: string }) {
     img.onload = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
+      // Constrain to a reasonable preview size (never full resolution)
+      const MAX = 512;
+      const scale = Math.min(MAX / img.naturalWidth, MAX / img.naturalHeight, 1);
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) return;
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imageData.data;
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i + 1], b = d[i + 2];
-        // Remove green screen pixels: green dominant, not too bright overall
         if (g > 100 && g > r * 1.4 && g > b * 1.4) {
           d[i + 3] = 0;
         }
@@ -41,8 +54,7 @@ function ChromaImage({ src }: { src: string }) {
   return (
     <canvas
       ref={canvasRef}
-      className="w-full h-full object-contain"
-      style={{ background: 'transparent' }}
+      style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }}
     />
   );
 }
@@ -126,7 +138,7 @@ export function AdminRoomPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {artworks.map(artwork => {
               const videoSrc = artwork.video_url ? resolveVideoUrl(artwork.video_url) : null;
-              const imgSrc = artwork.image_path ? resolveVideoUrl(artwork.image_path) : null;
+              const imgSrc = artwork.image_path ? resolveAssetUrl(artwork.image_path) : null;
 
               return (
                 <div
