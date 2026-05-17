@@ -4,17 +4,6 @@ import { getRoomArtworks, hideArtwork, unhideArtwork, deleteArtwork, type AdminA
 import { resolveVideoUrl } from '../lib/videoUrl';
 import { ChromaVideo } from '../components/ChromaVideo';
 
-// Resolves R2 asset paths (relative like 'images/xxx.png' OR full domain without scheme)
-function resolveAssetUrl(path?: string): string {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  // path could be 'images/xxx.png' (R2 relative) or 'media.hissnake.com/...' (no scheme)
-  if (path.startsWith('media.hissnake.com') || path.startsWith('videos/') || path.startsWith('images/')) {
-    return `https://media.hissnake.com/${path.replace(/^media\.hissnake\.com\//, '')}`;
-  }
-  return `https://media.hissnake.com/${path}`;
-}
-
 // ── ChromaImage: canvas-based chroma key for static images ──────────────────
 function ChromaImage({ src }: { src: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -138,7 +127,7 @@ export function AdminRoomPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {artworks.map(artwork => {
               const videoSrc = artwork.video_url ? resolveVideoUrl(artwork.video_url) : null;
-              const imgSrc = artwork.image_path ? resolveAssetUrl(artwork.image_path) : null;
+              const imgSrc = artwork.image_path ? resolveVideoUrl(artwork.image_path) : null;
 
               return (
                 <div
