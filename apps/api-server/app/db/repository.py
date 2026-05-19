@@ -58,13 +58,16 @@ class ArtworkRepository:
         return True
 
     async def get_all_generating(self, room_id: str) -> List[dict]:
-        result = await self.db.prepare(f"SELECT * FROM artworks WHERE status = '{ArtworkStatus.GENERATING.value}' AND room_id = ?").bind(room_id).all()
+        result = await self.db.prepare(
+            "SELECT * FROM artworks WHERE status = ? AND room_id = ?"
+        ).bind(ArtworkStatus.GENERATING.value, room_id).all()
         return result.results.to_py()
 
     async def get_all_completed(self, room_id: str) -> List[dict]:
+        # 'ready' is a legacy status kept for backward compatibility.
         result = await self.db.prepare(
-            f"SELECT * FROM artworks WHERE (status = '{ArtworkStatus.COMPLETED.value}' OR status = 'ready') AND room_id = ? AND hidden = 0 ORDER BY created_at DESC"
-        ).bind(room_id).all()
+            "SELECT * FROM artworks WHERE (status = ? OR status = ?) AND room_id = ? AND hidden = 0 ORDER BY created_at DESC"
+        ).bind(ArtworkStatus.COMPLETED.value, "ready", room_id).all()
         return result.results.to_py()
 
     async def get_all_rooms(self) -> List[dict]:
