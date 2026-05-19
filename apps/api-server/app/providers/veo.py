@@ -22,6 +22,28 @@ from app.interfaces.storage import StorageInterface
 
 logger = logging.getLogger(__name__)
 
+# HTTP statuses where the Veo operation is permanently gone/invalid and
+# polling will never succeed. 429 (quota) and 408 (timeout) are deliberately
+# excluded — they are transient and the generation may still be running.
+_TERMINAL_HTTP_STATUSES = {400, 403, 404, 410}
+
+
+def _terminal_http_status(exc_message: str) -> int | None:
+    """Return the HTTP status if `exc_message` signals a non-recoverable error.
+
+    JsFetchClient raises exceptions formatted as "HTTP <status>: <body>".
+    Returns the status code only when it is a known terminal status,
+    otherwise None (caller should treat as transient and retry).
+    """
+    if not exc_message.startswith("HTTP "):
+        return None
+    try:
+        status_code = int(exc_message.split(" ", 2)[1].rstrip(":"))
+    except (ValueError, IndexError):
+        return None
+    return status_code if status_code in _TERMINAL_HTTP_STATUSES else None
+
+
 class GeminiVeoProvider(AIProvider):
     def __init__(self, settings: Settings, http_client: HttpClientInterface, storage: StorageInterface | None = None) -> None:
         self.settings = settings
@@ -256,5 +278,13 @@ class GeminiVeoProvider(AIProvider):
             return ProviderResult(status=ProviderStatus.COMPLETED, video_url=video_url)
 
         except Exception as e:
-            logger.error(f"Error in check_status: {e}")
+            msg = str(e)
+            terminal_status = _terminal_http_status(msg)
+            if terminal_status is not None:
+                # Operation is gone/invalid — mark FAILED so the artwork stops
+                # being polled forever instead of staying "generating".
+                logger.error(f"check_status: non-recoverable HTTP {terminal_status}, marking FAILED: {e}")
+                return ProviderResult(status=ProviderStatus.FAILED, error=msg)
+            # Transient (5xx / 429 / 408 / network / parse): retry next poll.
+            logger.warning(f"check_status: transient error, will retry next poll: {e}")
             return ProviderResult(status=ProviderStatus.PROCESSING)
