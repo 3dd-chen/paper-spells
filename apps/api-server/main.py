@@ -43,22 +43,9 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Paper Spells API")
 
-@app.on_event("startup")
-async def _configure_cors():
-    pass
-
-def _get_cors_origins(settings: Settings) -> list[str]:
-    raw = settings.cors_allowed_origins
-    if not raw or raw == "*":
-        # Fallback to known origins if wildcard is set with credentials
-        return [
-            "https://gallery.hissnake.com",
-            "https://upload.hissnake.com",
-            "http://localhost:5173",
-            "http://localhost:4173",
-        ]
-    return [o.strip() for o in raw.split(",") if o.strip()]
-
+# CORS origins are static by necessity: Cloudflare Python Workers deliver
+# `[vars]` per-request via the ASGI scope, so no env is available at module
+# import time when the middleware is registered. Edit this list to change origins.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
