@@ -161,7 +161,7 @@ async def get_gallery(
         try:
             result = await provider.check_status(artwork["provider_task_id"], env=env)
             if result.status == ProviderStatus.COMPLETED and result.video_url:
-                await repo.update_to_completed(artwork["id"], result.video_url)
+                await repo.update_to_completed(artwork["id"], result.video_url, result.facing_direction)
             elif result.status == ProviderStatus.FAILED:
                 await repo.update_to_failed(artwork["id"])
         except Exception as e:

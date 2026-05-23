@@ -45,10 +45,15 @@ class ArtworkRepository:
             ).bind(ArtworkStatus.GENERATING.value, provider_task_id, task_id).run()
         return True
 
-    async def update_to_completed(self, task_id: str, video_url: str) -> bool:
-        await self.db.prepare(
-            "UPDATE artworks SET status = ?, video_url = ? WHERE id = ?"
-        ).bind(ArtworkStatus.COMPLETED.value, video_url, task_id).run()
+    async def update_to_completed(self, task_id: str, video_url: str, facing_direction: Optional[str] = None) -> bool:
+        if facing_direction:
+            await self.db.prepare(
+                "UPDATE artworks SET status = ?, video_url = ?, facing_direction = ? WHERE id = ?"
+            ).bind(ArtworkStatus.COMPLETED.value, video_url, facing_direction, task_id).run()
+        else:
+            await self.db.prepare(
+                "UPDATE artworks SET status = ?, video_url = ? WHERE id = ?"
+            ).bind(ArtworkStatus.COMPLETED.value, video_url, task_id).run()
         return True
 
     async def update_to_failed(self, task_id: str) -> bool:

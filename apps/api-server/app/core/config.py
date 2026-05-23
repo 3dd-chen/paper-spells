@@ -23,7 +23,7 @@ class Settings:
             ai_provider=getattr(env, "AI_PROVIDER", "mock"),
             gemini_api_key=getattr(env, "GEMINI_API_KEY", None),
             veo_model_name=getattr(env, "VEO_MODEL_NAME", "veo-3.1-lite-generate-001"),
-            gemini_model_name=getattr(env, "GEMINI_MODEL_NAME", "gemini-3.5-flash"),
+            gemini_model_name=getattr(env, "GEMINI_MODEL_NAME", "gemini-3.1-flash-lite"),
             r2_public_url=getattr(env, "R2_PUBLIC_URL", "https://media.hissnake.com"),
             jwt_secret=getattr(env, "JWT_SECRET", "dev-secret-change-me"),
         )

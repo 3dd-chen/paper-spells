@@ -19,6 +19,7 @@ class ProviderResult:
     status: ProviderStatus
     video_url: Optional[str] = None
     error: Optional[str] = None
+    facing_direction: Optional[str] = None
 
 
 class AIProvider(ABC):
