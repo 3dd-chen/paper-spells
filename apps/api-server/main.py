@@ -29,6 +29,8 @@ class ConsoleHandler(logging.Handler):
                 js.console.error(msg)
             elif record.levelno >= logging.WARNING:
                 js.console.warn(msg)
+            elif record.levelno >= logging.INFO:
+                js.console.info(msg)
             else:
                 js.console.log(msg)
         except:
