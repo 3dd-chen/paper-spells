@@ -184,7 +184,6 @@ class GeminiVeoProvider(AIProvider):
                     "includeAudio": False,
                     "resolution": "720p",
                     "fps": 24,
-                    "enhancePrompt": False,
                     "negativePrompt": (
                         "turning around, spinning, looking backwards, changing facing direction, "
                         "rotating 180 degrees, turning back, flipping direction, "
