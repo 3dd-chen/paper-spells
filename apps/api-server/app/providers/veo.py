@@ -147,7 +147,12 @@ class GeminiVeoProvider(AIProvider):
         direction_hint = "facing left, moving left" if "left" in custom_prompt.lower() else "facing right, moving right"
         custom_prompt = (
             f"{custom_prompt}. "
-            f"Character consistently {direction_hint} throughout entire video, never turning around. "
+            f"The character in the starting image is already {direction_hint}. "
+            f"Maintain this starting direction and continue running forward in the same direction. "
+            f"Strictly maintain the exact 2D black and white line art drawing style of the first frame throughout the entire video. "
+            f"Static camera, locked background, side-view perspective. "
+            f"Do not turn the character around, do not rotate 180 degrees, do not change facing direction. "
+            f"Keep the character shape, topology, and lines perfectly consistent. "
             "No text, no watermarks, no captions. "
             "Animation starts seamlessly from the provided image as the exact first frame. Smooth motion."
         )
@@ -179,11 +184,14 @@ class GeminiVeoProvider(AIProvider):
                     "includeAudio": False,
                     "resolution": "720p",
                     "fps": 24,
+                    "enhancePrompt": False,
                     "negativePrompt": (
                         "turning around, spinning, looking backwards, changing facing direction, "
+                        "rotating 180 degrees, turning back, flipping direction, "
+                        "camera movement, zoom, pan, tilt, rotation, moving camera, dynamic camera angles, "
                         "text, watermark, caption, letters, numbers, subtitle, signature, logo, "
-                        "3d render, camera movement, audio, sound, speech, photorealistic, "
-                        "style change, character redesign"
+                        "3d render, shading, shadows, gradients, volumetric lighting, "
+                        "audio, sound, speech, photorealistic, style change, character redesign"
                     )
                 }
             }
