@@ -131,13 +131,9 @@ class GeminiVeoProvider(AIProvider):
         else:
             logger.info("Storage interface not provided. Skipping image archival upload.")
 
-        # 2. Dynamic robust prompt based on character description (any lively movement is great!)
+        # 2. Dynamic robust prompt based on character description (any lively gesturing/movement is great!)
         char_desc = character_description or "a simple black stick figure"
-        if "stick figure" in char_desc.lower():
-            action = "moving and animating energetically with lively motion, with legs and arms cycling"
-        else:
-            action = "moving and animating naturally with lively motion, bringing the drawing to life"
-            
+        action = "moving, gesturing, and animating naturally with lively motion, bringing the drawing to life"
         custom_prompt = f"{char_desc} {action} on a solid green background, no text, no watermarks, no captions, no letters"
 
         # 3. Submit to Veo
