@@ -1,5 +1,5 @@
-self.onmessage = async (e: MessageEvent<{ src: string }>) => {
-  const { src } = e.data;
+self.onmessage = async (e: MessageEvent<{ src: string, flipHorizontal?: boolean }>) => {
+  const { src, flipHorizontal } = e.data;
 
   try {
     // 1. Fetch the image to get a Blob
@@ -39,7 +39,15 @@ self.onmessage = async (e: MessageEvent<{ src: string }>) => {
     // Fill with pure green (chroma key background for padding)
     ctx.fillStyle = '#00FF00';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (flipHorizontal) {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
     ctx.drawImage(img, xOffset, yOffset);
+    if (flipHorizontal) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
+    }
 
     // Convert bright pixels (white paper) to pure green
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);

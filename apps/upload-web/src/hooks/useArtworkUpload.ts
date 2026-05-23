@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { processImageForUpload } from './useImageProcessor';
-import { submitArtwork } from '../lib/api';
+import { submitArtwork, analyzeDirection } from '../lib/api';
 import { toast } from 'sonner';
 
 export function useArtworkUpload() {
@@ -9,6 +9,7 @@ export function useArtworkUpload() {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [originalDirection, setOriginalDirection] = useState('right');
   
   const roomId = new URLSearchParams(window.location.search).get('room');
 
@@ -22,7 +23,14 @@ export function useArtworkUpload() {
       const src = event.target?.result as string;
       setImageSrc(src);
       try {
-        const result = await processImageForUpload(src);
+        // 1. Analyze direction
+        const direction = await analyzeDirection(src);
+        setOriginalDirection(direction);
+        
+        // 2. Process and flip horizontally if the character is facing left
+        const flipHorizontal = direction === 'left';
+        const result = await processImageForUpload(src, flipHorizontal);
+        
         setProcessedImage(result.dataUrl);
         setAspectRatio(result.aspectRatio);
         setStatus('idle');
@@ -44,7 +52,7 @@ export function useArtworkUpload() {
     if (!processedImage || !roomId) return;
     setStatus('uploading');
     try {
-      await submitArtwork(processedImage, aspectRatio, roomId);
+      await submitArtwork(processedImage, aspectRatio, roomId, originalDirection);
       setStatus('success');
       toast.success('Artwork animated successfully!');
     } catch (err: unknown) {

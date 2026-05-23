@@ -13,6 +13,7 @@ from app.db.repository import ArtworkRepository, AdminRepository
 from app.providers import AIProvider, MockProvider, GeminiVeoProvider, ProviderStatus
 from app.schemas import (
     UploadRequest, UploadResponse, GalleryItem,
+    AnalyzeDirectionRequest, AnalyzeDirectionResponse,
     AdminLoginRequest, AdminLoginResponse, AdminArtworkItem, AdminRoomItem,
 )
 from app.core.config import Settings
@@ -134,7 +135,8 @@ async def upload_artwork(
             image_bytes=image_bytes,
             file_id=file_id,
             aspect_ratio=req.aspect_ratio,
-            env=env
+            env=env,
+            original_direction=req.original_direction
         )
         logger.info(f"Provider accepted task: {provider_task_id}, direction: {facing_direction}")
         await repo.update_to_generating(artwork["id"], provider_task_id, facing_direction)
@@ -143,6 +145,25 @@ async def upload_artwork(
         logger.error(f"Provider error for artwork {artwork['id']}: {type(e).__name__}: {e}")
         await repo.update_to_failed(artwork["id"])
         raise HTTPException(status_code=502, detail=f"Provider error: {type(e).__name__}: {e}")
+
+
+@app.post("/api/analyze-direction", response_model=AnalyzeDirectionResponse)
+async def analyze_direction(
+    req: AnalyzeDirectionRequest,
+    request: Request,
+    provider: AIProvider = Depends(get_provider),
+) -> AnalyzeDirectionResponse:
+    try:
+        image_bytes = base64.b64decode(req.image_data.split(",")[-1])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid Base64 image data")
+
+    if not isinstance(provider, GeminiVeoProvider):
+        return AnalyzeDirectionResponse(direction="right")
+
+    env = request.scope.get("env", None)
+    direction = await provider.analyze_image_direction(image_bytes, env=env)
+    return AnalyzeDirectionResponse(direction=direction)
 
 
 @app.get("/api/gallery")

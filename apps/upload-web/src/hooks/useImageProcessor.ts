@@ -8,6 +8,7 @@
  */
 export function processImageForUpload(
   src: string,
+  flipHorizontal: boolean = false,
 ): Promise<{ dataUrl: string; aspectRatio: string }> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('../workers/imageProcessor.worker.ts', import.meta.url), { type: 'module' });
@@ -26,6 +27,6 @@ export function processImageForUpload(
       worker.terminate();
     };
 
-    worker.postMessage({ src });
+    worker.postMessage({ src, flipHorizontal });
   });
 }

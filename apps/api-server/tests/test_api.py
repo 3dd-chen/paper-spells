@@ -15,8 +15,8 @@ _TINY_PNG_B64 = (
 
 # A custom DI mock provider to test dependency injection
 class CustomTestProvider(AIProvider):
-    async def submit(self, image_bytes, file_id, aspect_ratio="16:9", env=None):
-        return "custom-test-task", None
+    async def submit(self, image_bytes, file_id, aspect_ratio="16:9", env=None, original_direction=None):
+        return "custom-test-task", original_direction
     
     async def check_status(self, provider_task_id, env=None):
         return ProviderResult(status=ProviderStatus.COMPLETED, video_url="https://test.video", facing_direction="left")
@@ -35,7 +35,7 @@ def test_upload_artwork_with_di_override():
     app.dependency_overrides[get_provider] = override_get_provider
     try:
         with TestClient(app) as client:
-            response = client.post("/api/upload", json={"image_data": _TINY_PNG_B64, "aspect_ratio": "16:9"})
+            response = client.post("/api/upload", json={"image_data": _TINY_PNG_B64, "aspect_ratio": "16:9", "original_direction": "left", "room_id": "default"})
             assert response.status_code == 200
             data = response.json()
             assert "task_id" in data
