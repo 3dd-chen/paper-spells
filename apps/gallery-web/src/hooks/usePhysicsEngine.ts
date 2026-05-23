@@ -119,8 +119,9 @@ export function usePhysicsEngine(onFoodEnd?: () => void) {
         if (inst.y > height - MARGIN){ inst.y = height - MARGIN; inst.vy = -Math.abs(inst.vy); }
 
         // Apply to DOM — GPU-accelerated, use translate(-50%, -50%) to center perfectly
-        const baseFlip = inst.facingDirection === 'left' ? -1 : 1;
-        const flipX = inst.vx < 0 ? -baseFlip : baseFlip;
+        // Since every video in the gallery is generated as right-facing (left-facing inputs are pre-flipped on upload),
+        // we flip horizontally (scaleX < 0) when moving left (vx < 0), and render normally when moving right (vx >= 0).
+        const flipX = inst.vx < 0 ? -1 : 1;
         inst.element.style.transform =
           `translate3d(${inst.x}px, ${inst.y}px, 0) translate(-50%, -50%) scale(${inst.scale * flipX}, ${inst.scale})`;
       }
