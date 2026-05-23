@@ -74,7 +74,7 @@ class GeminiVeoProvider(AIProvider):
         return operation_name, facing_direction
 
     async def _analyze_image(self, image_bytes: bytes, project_id: str, file_id: str, env: Any) -> tuple[str, str]:
-        logger.info(f"Analyzing image with Gemini 2.5 Flash Lite on Vertex AI for artwork {file_id}")
+        logger.info(f"Analyzing image with {self.settings.gemini_model_name} for artwork {file_id}")
         
         prompt_text = (
             "Analyze this image. Determine if the main character or object is naturally facing 'left' or 'right'. If unclear, default to 'right'.\n"

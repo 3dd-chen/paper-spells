@@ -38,7 +38,7 @@ class ConsoleHandler(logging.Handler):
             print(self.format(record), file=sys.stderr)
 
 handler = ConsoleHandler()
-handler.setFormatter(logging.Formatter("[%(levelname)s] %(name)s: %(message)s"))
+handler.setFormatter(logging.Formatter("%(name)s: %(message)s")) # Remove manually duplicated [%(levelname)s] since CF dashboard already has a Level column
 logging.getLogger().addHandler(handler)
 logging.getLogger().setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
@@ -136,11 +136,11 @@ async def upload_artwork(
             aspect_ratio=req.aspect_ratio,
             env=env
         )
-        logger.info(f"[upload] Provider accepted task: {provider_task_id}, direction: {facing_direction}")
+        logger.info(f"Provider accepted task: {provider_task_id}, direction: {facing_direction}")
         await repo.update_to_generating(artwork["id"], provider_task_id, facing_direction)
         return UploadResponse(task_id=artwork["id"], status="generating")
     except Exception as e:
-        logger.error(f"[upload] Provider error for artwork {artwork['id']}: {type(e).__name__}: {e}")
+        logger.error(f"Provider error for artwork {artwork['id']}: {type(e).__name__}: {e}")
         await repo.update_to_failed(artwork["id"])
         raise HTTPException(status_code=502, detail=f"Provider error: {type(e).__name__}: {e}")
 
@@ -165,7 +165,7 @@ async def get_gallery(
             elif result.status == ProviderStatus.FAILED:
                 await repo.update_to_failed(artwork["id"])
         except Exception as e:
-            logger.error(f"[gallery] Error checking status for {artwork['id']}: {e}")
+            logger.error(f"Error checking status for {artwork['id']}: {e}")
 
     completed = await repo.get_all_completed(room_id)
     return [
