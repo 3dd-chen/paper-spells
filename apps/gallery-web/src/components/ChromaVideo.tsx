@@ -73,7 +73,7 @@ export function ChromaVideo({ src }: ChromaVideoProps) {
   }, []);
 
   return (
-    <>
+    <div className="relative w-full h-full min-w-full min-h-full overflow-hidden">
       <video
         ref={videoRef}
         src={src}
@@ -85,6 +85,6 @@ export function ChromaVideo({ src }: ChromaVideoProps) {
         style={{ display: 'none' }}
       />
       <canvas ref={canvasRef} style={{ display: 'block', position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
-    </>
+    </div>
   );
 }

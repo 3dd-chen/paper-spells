@@ -275,10 +275,12 @@ async def admin_delete_artwork(
         storage = CloudflareR2Storage(env.BUCKET)
         for key in [artwork.get("image_path"), artwork.get("video_url")]:
             if key:
-                # Strip domain prefix if video_url is a full URL
-                if key.startswith("http"):
-                    from urllib.parse import urlparse
-                    key = urlparse(key).path.lstrip("/")
+                # Extract correct R2 key (e.g. 'images/...' or 'videos/...') from full URL or domain prefix
+                for prefix in ["images/", "videos/"]:
+                    idx = key.find(prefix)
+                    if idx != -1:
+                        key = key[idx:]
+                        break
                 try:
                     await storage.delete(key)
                 except Exception as e:
