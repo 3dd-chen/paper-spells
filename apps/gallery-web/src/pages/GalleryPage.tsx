@@ -62,7 +62,7 @@ export function GalleryPage() {
               const inst = instancesRef.current[v.id];
               if (inst) inst.element = el;
             }}
-            className="absolute top-0 left-0 w-[220px] aspect-video will-change-transform pointer-events-none overflow-hidden"
+            className="absolute top-0 left-0 w-[320px] aspect-video will-change-transform pointer-events-none overflow-hidden"
           >
             <ChromaVideo src={resolveVideoUrl(v.video_url ?? '')} />
           </div>

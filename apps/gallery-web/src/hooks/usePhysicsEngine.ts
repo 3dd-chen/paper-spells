@@ -18,7 +18,7 @@ interface FoodState {
 }
 
 const DVD_SPEED = 2.0;
-const MARGIN = 110;
+const MARGIN = 160; // 320px width / 2 to prevent going off-screen
 
 /**
  * Runs a DVD-bounce physics loop for all instances.
@@ -99,7 +99,7 @@ export function usePhysicsEngine(onFoodEnd?: () => void) {
           const dx = inst.x - other.x;
           const dy = inst.y - other.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const minD = 150; // Minimum desired distance between characters
+          const minD = 220; // Minimum desired distance between characters (adjusted for 320px width)
           
           if (dist < minD) {
             const force = (minD - dist) * 0.005; // Push away force (softer)
@@ -141,7 +141,7 @@ export function usePhysicsEngine(onFoodEnd?: () => void) {
         y: 150 + Math.random() * (window.innerHeight - 300),
         vx: Math.cos(angle) * DVD_SPEED,
         vy: Math.sin(angle) * DVD_SPEED,
-        scale: 0.7 + Math.random() * 0.4,
+        scale: 0.9 + Math.random() * 0.4, // Adjusted scale for bigger and clearer rendering (0.9 to 1.3)
         element: null,
         facingDirection,
       };
