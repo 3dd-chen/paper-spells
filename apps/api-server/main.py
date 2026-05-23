@@ -205,7 +205,8 @@ async def upload_artwork(
             file_id=file_id,
             aspect_ratio=req.aspect_ratio,
             env=env,
-            original_direction=req.original_direction
+            original_direction=req.original_direction,
+            character_description=req.character_description
         )
         logger.info(f"Provider accepted task: {provider_task_id}, direction: {facing_direction}")
         await repo.update_to_generating(artwork["id"], provider_task_id, facing_direction)
@@ -228,11 +229,11 @@ async def analyze_direction(
         raise HTTPException(status_code=400, detail="Invalid Base64 image data")
 
     if not isinstance(provider, GeminiVeoProvider):
-        return AnalyzeDirectionResponse(direction="right")
+        return AnalyzeDirectionResponse(direction="right", description="a simple black stick figure")
 
     env = request.scope.get("env", None)
-    direction = await provider.analyze_image_direction(image_bytes, env=env)
-    return AnalyzeDirectionResponse(direction=direction)
+    result = await provider.analyze_image_direction(image_bytes, env=env)
+    return AnalyzeDirectionResponse(direction=result["direction"], description=result["description"])
 
 
 @app.get("/api/gallery")

@@ -1,14 +1,13 @@
 const API_URL = import.meta.env.VITE_API_BASE_URL as string ?? '';
 
-export async function analyzeDirection(imageData: string): Promise<string> {
+export async function analyzeDirection(imageData: string): Promise<{ direction: string; description?: string }> {
   const res = await fetch(`${API_URL}/api/analyze-direction`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ image_data: imageData }),
   });
   if (!res.ok) throw new Error(`Analysis failed: ${res.statusText}`);
-  const data = await res.json();
-  return data.direction;
+  return res.json();
 }
 
 /**
@@ -20,11 +19,18 @@ export async function submitArtwork(
   aspectRatio: string,
   roomId: string,
   originalDirection: string,
+  characterDescription?: string,
 ): Promise<{ task_id: string; status: string }> {
   const res = await fetch(`${API_URL}/api/upload`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_data: imageData, aspect_ratio: aspectRatio, room_id: roomId, original_direction: originalDirection }),
+    body: JSON.stringify({
+      image_data: imageData,
+      aspect_ratio: aspectRatio,
+      room_id: roomId,
+      original_direction: originalDirection,
+      character_description: characterDescription,
+    }),
   });
 
   if (!res.ok) {

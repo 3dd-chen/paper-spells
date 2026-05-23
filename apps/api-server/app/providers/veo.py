@@ -51,18 +51,20 @@ class GeminiVeoProvider(AIProvider):
         self.storage = storage
         self.token_store = {"token": None, "expiry": 0}
 
-    async def analyze_image_direction(self, image_bytes: bytes, env: Any = None) -> str:
-        """Analyze the image to determine if the character is facing left or right."""
+    async def analyze_image_direction(self, image_bytes: bytes, env: Any = None) -> dict[str, str]:
+        """Analyze the image to determine if the character is facing left or right and get a description."""
         logger.info(f"Analyzing image direction with {self.settings.gemini_model_name}")
         project_id = self.settings.gcp_project_id
 
         prompt_text = (
-            "Analyze this image of a hand-drawn doodle or stick figure.\n"
-            "Determine the PRIMARY horizontal direction the character is facing:\n"
-            "- 'left' if the character is facing towards the LEFT side of the screen\n"
-            "- 'right' if the character is facing towards the RIGHT side of the screen\n"
-            "Return ONLY a JSON object: {\"direction\": \"left\"} or {\"direction\": \"right\"}\n"
-            "Do not include markdown code blocks or any other text."
+            "You are an expert at analyzing hand-drawn doodles, sketches, and characters.\n"
+            "Look at the main subject/character in this image and determine:\n"
+            "1. 'direction': The horizontal direction the character is facing. Is it facing the left side of the screen ('left') or the right side ('right')?\n"
+            "   - Use cues like the direction of the face, beak, eyes, nose, front of a vehicle, or forward posture.\n"
+            "   - If it is facing forward (towards the viewer) or direction is completely ambiguous, default to 'right'.\n"
+            "2. 'description': A brief (3-6 words) description of the character itself (e.g. 'a simple drawing of a white goose', 'a black stick figure', 'a cute hand-drawn dog'). Describe ONLY the character's core shape and color. Do not describe the background, green screen, or padding.\n\n"
+            "Return ONLY a valid JSON object of the format: {\"direction\": \"left\" | \"right\", \"description\": \"...\"}\n"
+            "Do not include markdown code blocks (e.g., do not wrap in ```json), and do not include any other text."
         )
 
         try:
@@ -106,15 +108,16 @@ class GeminiVeoProvider(AIProvider):
             direction = result.get("direction", "right")
             if direction not in ("left", "right"):
                 direction = "right"
-            return direction
+            description = result.get("description", "a simple black stick figure")
+            return {"direction": direction, "description": description}
 
         except Exception as e:
-            logger.warning(f"Direction analysis failed, defaulting to 'right'. Error: {e}")
-            return "right"
+            logger.warning(f"Direction analysis failed, defaulting. Error: {e}")
+            return {"direction": "right", "description": "a simple black stick figure"}
 
     # ── submit ────────────────────────────────────────────────────────────────
 
-    async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None, original_direction: str | None = None) -> tuple[str, str | None]:
+    async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None, original_direction: str | None = None, character_description: str | None = None) -> tuple[str, str | None]:
         project_id = self.settings.gcp_project_id
 
         # 1. Upload original image to R2 for archival
@@ -126,8 +129,14 @@ class GeminiVeoProvider(AIProvider):
         else:
             logger.info("Storage interface not provided. Skipping image archival upload.")
 
-        # 2. Hardcoded robust prompt
-        custom_prompt = "A simple black stick figure running energetically with legs and arms cycling on a solid green background, no text, no watermarks, no captions, no letters"
+        # 2. Dynamic robust prompt based on character description
+        char_desc = character_description or "a simple black stick figure"
+        if "stick figure" in char_desc.lower():
+            action = "running energetically with legs and arms cycling"
+        else:
+            action = "running energetically"
+            
+        custom_prompt = f"{char_desc} {action} on a solid green background, no text, no watermarks, no captions, no letters"
 
         # 3. Submit to Veo
         operation_name = await self._submit_to_veo(custom_prompt, image_bytes, project_id, aspect_ratio, file_id, env)

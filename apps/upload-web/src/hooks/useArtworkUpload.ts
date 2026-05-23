@@ -10,6 +10,7 @@ export function useArtworkUpload() {
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [originalDirection, setOriginalDirection] = useState('right');
+  const [characterDescription, setCharacterDescription] = useState('a simple black stick figure');
   
   const roomId = new URLSearchParams(window.location.search).get('room');
 
@@ -23,12 +24,15 @@ export function useArtworkUpload() {
       const src = event.target?.result as string;
       setImageSrc(src);
       try {
-        // 1. Analyze direction
-        const direction = await analyzeDirection(src);
-        setOriginalDirection(direction);
+        // 1. Analyze direction and description
+        const analysis = await analyzeDirection(src);
+        setOriginalDirection(analysis.direction);
+        if (analysis.description) {
+          setCharacterDescription(analysis.description);
+        }
         
         // 2. Process and flip horizontally if the character is facing left
-        const flipHorizontal = direction === 'left';
+        const flipHorizontal = analysis.direction === 'left';
         const result = await processImageForUpload(src, flipHorizontal);
         
         setProcessedImage(result.dataUrl);
@@ -52,7 +56,7 @@ export function useArtworkUpload() {
     if (!processedImage || !roomId) return;
     setStatus('uploading');
     try {
-      await submitArtwork(processedImage, aspectRatio, roomId, originalDirection);
+      await submitArtwork(processedImage, aspectRatio, roomId, originalDirection, characterDescription);
       setStatus('success');
       toast.success('Artwork animated successfully!');
     } catch (err: unknown) {

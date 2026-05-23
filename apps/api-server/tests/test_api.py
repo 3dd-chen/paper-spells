@@ -15,7 +15,7 @@ _TINY_PNG_B64 = (
 
 # A custom DI mock provider to test dependency injection
 class CustomTestProvider(AIProvider):
-    async def submit(self, image_bytes, file_id, aspect_ratio="16:9", env=None, original_direction=None):
+    async def submit(self, image_bytes, file_id, aspect_ratio="16:9", env=None, original_direction=None, character_description=None):
         return "custom-test-task", original_direction
     
     async def check_status(self, provider_task_id, env=None):
