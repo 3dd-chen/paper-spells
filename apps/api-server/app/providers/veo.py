@@ -78,6 +78,10 @@ class GeminiVeoProvider(AIProvider):
         
         prompt_text = (
             "Analyze this image. Determine if the main character or object is naturally facing 'left' or 'right'. If unclear, default to 'right'.\n"
+            "CRITICAL VISUAL CLUES FOR DOODLES/STICK FIGURES:\n"
+            "- Lean: The direction the head or torso leans forward is usually the facing direction.\n"
+            "- Limbs: Bent knees, elbows, or arms pointing forward show the facing direction.\n"
+            "- Motion/Dust: Any kick-up lines, wind spikes, or motion streaks are behind the character (the opposite side of where it faces).\n"
             "IMPORTANT RULES:\n"
             "1. The 'prompt' MUST explicitly state the facing direction AND movement direction (e.g., 'facing left, moving left').\n"
             "2. The 'prompt' MUST include: 'no text, no watermarks, no captions, no letters'.\n"
@@ -143,8 +147,12 @@ class GeminiVeoProvider(AIProvider):
         return custom_prompt, facing_direction
 
     async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
-        # We strip any hardcoded direction keywords (left/right) from Gemini's custom prompt to prevent Veo from turning the character around due to classification mismatches.
-        # Instead, we use relative direction constraints to maintain the natural orientation of the first frame.
+        # Reinforce direction + clean output in the final prompt.
+        # Since we use the highly intelligent Gemini 3.5 Flash, direction detection is highly accurate,
+        # and syncing the direction keyword explicitly ensures that Veo's video direction perfectly matches
+        # the database's facing_direction, preventing the "moonwalk" running-backwards bug on screen.
+        direction_hint = "facing left, moving left" if "left" in custom_prompt.lower() else "facing right, moving right"
+        
         clean_prompt = custom_prompt
         for kw in ["facing left, moving left", "facing right, moving right", "facing left", "facing right", "moving left", "moving right"]:
             clean_prompt = clean_prompt.replace(kw, "")
@@ -152,7 +160,8 @@ class GeminiVeoProvider(AIProvider):
 
         custom_prompt = (
             f"{clean_prompt}. "
-            f"Maintain the starting direction of the character in the first frame and continue running forward in the same direction. "
+            f"The character in the starting image is already {direction_hint}. "
+            f"Maintain this starting direction and continue running forward in the same direction. "
             f"Strictly maintain the exact 2D black and white line art drawing style of the first frame throughout the entire video. "
             f"Static camera, locked background, side-view perspective. "
             f"Do not turn the character around, do not rotate 180 degrees, do not change facing direction. "
