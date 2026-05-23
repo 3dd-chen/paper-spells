@@ -62,6 +62,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def log_request_response(request: Request, call_next):
+    method = request.method
+    path = request.url.path
+    query = request.url.query
+    query_str = f"?{query}" if query else ""
+    
+    # 1. Parse Request Body safely
+    body_summary = ""
+    if method in ("POST", "PUT", "PATCH"):
+        try:
+            body_bytes = await request.body()
+            
+            # Restore body for downstream handlers
+            async def receive():
+                return {"type": "http.request", "body": body_bytes, "more_body": False}
+            request._receive = receive
+            
+            if body_bytes:
+                import json
+                try:
+                    body_json = json.loads(body_bytes.decode("utf-8"))
+                    if isinstance(body_json, dict):
+                        logged_body = body_json.copy()
+                        if "image_data" in logged_body:
+                            img_len = len(str(logged_body["image_data"]))
+                            logged_body["image_data"] = f"<Base64 Image: {img_len} chars>"
+                        body_summary = f" body={json.dumps(logged_body)}"
+                    else:
+                        body_summary = f" body={body_json}"
+                except json.JSONDecodeError:
+                    body_summary = f" body=<{len(body_bytes)} bytes>"
+        except Exception as e:
+            body_summary = f" body=<failed to read: {e}>"
+
+    logger.info(f"--> {method} {path}{query_str}{body_summary}")
+
+    # 2. Proceed to next handler
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        logger.error(f"Request failed: {method} {path}{query_str}: {e}")
+        raise e
+
+    # 3. Parse Response Body safely
+    resp_summary = ""
+    try:
+        content_type = response.headers.get("content-type", "")
+        if "application/json" in content_type or "text/" in content_type:
+            chunks = []
+            async for chunk in response.body_iterator:
+                chunks.append(chunk)
+            response_body = b"".join(chunks)
+            
+            # Recreate iterator so the client still gets the response
+            async def new_iterator():
+                for chunk in chunks:
+                    yield chunk
+            response.body_iterator = new_iterator()
+            
+            if response_body:
+                import json
+                try:
+                    resp_json = json.loads(response_body.decode("utf-8"))
+                    resp_summary = f" body={json.dumps(resp_json)}"
+                except json.JSONDecodeError:
+                    if len(response_body) < 500:
+                        resp_summary = f" body={response_body.decode('utf-8', errors='ignore')}"
+                    else:
+                        resp_summary = f" body=<{len(response_body)} bytes>"
+        else:
+            resp_summary = f" content_type={content_type}"
+    except Exception as e:
+        resp_summary = f" body=<failed to read response: {e}>"
+
+    logger.info(f"<-- {response.status_code} {method} {path} {resp_summary}")
+    return response
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Internal error: {type(exc).__name__}: {exc}")
