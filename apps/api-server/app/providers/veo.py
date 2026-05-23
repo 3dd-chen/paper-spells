@@ -98,13 +98,15 @@ class GeminiVeoProvider(AIProvider):
             res_json = await self.http_client.post_json(url, headers, payload)
             text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            text = text.strip()
+            # Robust JSON extraction: slice out everything between first '{' and last '}'
+            start = text.find('{')
+            end = text.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                json_str = text[start:end+1]
+            else:
+                json_str = text
 
-            result = json.loads(text)
+            result = json.loads(json_str)
             direction = result.get("direction", "right")
             if direction not in ("left", "right"):
                 direction = "right"
@@ -129,12 +131,12 @@ class GeminiVeoProvider(AIProvider):
         else:
             logger.info("Storage interface not provided. Skipping image archival upload.")
 
-        # 2. Dynamic robust prompt based on character description
+        # 2. Dynamic robust prompt based on character description (any lively movement is great!)
         char_desc = character_description or "a simple black stick figure"
         if "stick figure" in char_desc.lower():
-            action = "running energetically with legs and arms cycling"
+            action = "moving and animating energetically with lively motion, with legs and arms cycling"
         else:
-            action = "running energetically"
+            action = "moving and animating naturally with lively motion, bringing the drawing to life"
             
         custom_prompt = f"{char_desc} {action} on a solid green background, no text, no watermarks, no captions, no letters"
 
@@ -148,7 +150,7 @@ class GeminiVeoProvider(AIProvider):
         
         final_prompt = (
             f"{custom_prompt}. "
-            "Animate the character running forward in the direction it is naturally facing in the starting image. "
+            "Animate the character moving forward and animating naturally in the direction it is naturally facing in the starting image. "
             "Strictly maintain the exact 2D black and white line art drawing style of the first frame throughout the entire video. "
             "Static camera, locked background, side-view perspective. "
             "Do not turn the character around, do not rotate 180 degrees, do not change facing direction at any point. "
