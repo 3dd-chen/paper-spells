@@ -61,11 +61,50 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-paper-deep text-inksoft border-ink',
 };
 
-const STATUS_ICONS: Record<string, string> = {
-  generating: '⏳',
-  failed: '❌',
-  pending: '🕐',
-};
+// Inline ink glyphs (no emoji) keyed by artwork status.
+function StatusGlyph({ status }: { status: string }) {
+  const common = {
+    width: 30,
+    height: 30,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+  if (status === 'failed') {
+    return (
+      <svg {...common} stroke="#f0411f" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9 9l6 6M15 9l-6 6" />
+      </svg>
+    );
+  }
+  if (status === 'generating') {
+    return (
+      <svg {...common} stroke="#1c1813" aria-hidden="true">
+        <path d="M12 3a9 9 0 1 0 9 9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    );
+  }
+  if (status === 'pending') {
+    return (
+      <svg {...common} stroke="#6a6155" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    );
+  }
+  // default / unknown — framed canvas glyph
+  return (
+    <svg {...common} stroke="#6a6155" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2.5" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5L5 21" />
+    </svg>
+  );
+}
 
 export function AdminRoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -152,8 +191,8 @@ export function AdminRoomPage() {
                     ) : imgSrc ? (
                       <ChromaImage src={imgSrc} />
                     ) : (
-                      <div className="flex flex-col items-center gap-1 text-inksoft">
-                        <span className="text-3xl">{STATUS_ICONS[artwork.status] ?? '🎨'}</span>
+                      <div className="flex flex-col items-center gap-1.5 text-inksoft">
+                        <StatusGlyph status={artwork.status} />
                         <span className="font-label text-xs capitalize">{artwork.status}</span>
                       </div>
                     )}

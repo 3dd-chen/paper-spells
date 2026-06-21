@@ -43,13 +43,20 @@ export function GalleryPage() {
             left: food.x,
             top: food.y,
             transform: 'translate(-50%, -50%)',
-            fontSize: 40,
             pointerEvents: 'none',
             zIndex: 100,
             animation: 'pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
           }}
         >
-          🧁
+          <svg width="42" height="42" viewBox="0 0 32 32" aria-hidden="true">
+            <path
+              d="M16 2 Q17.5 14.5 30 16 Q17.5 17.5 16 30 Q14.5 17.5 2 16 Q14.5 14.5 16 2 Z"
+              fill="#ffc23c"
+              stroke="#1c1813"
+              strokeWidth="2"
+              strokeLinejoin="round"
+            />
+          </svg>
         </div>
       )}
 
@@ -72,7 +79,15 @@ export function GalleryPage() {
       {isLoaded && videos.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="sticker tilt-l px-16 py-12 text-center">
-            <div className="text-5xl mb-3 animate-bob inline-block">🪄</div>
+            <svg width="60" height="60" viewBox="0 0 32 32" className="mb-4 animate-bob inline-block" aria-hidden="true">
+              <path
+                d="M16 2 Q17.5 14.5 30 16 Q17.5 17.5 16 30 Q14.5 17.5 2 16 Q14.5 14.5 16 2 Z"
+                fill="#2f4fe6"
+                stroke="#1c1813"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+            </svg>
             <p className="font-display font-black text-2xl text-ink">
               No spells cast yet...
             </p>
