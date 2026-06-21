@@ -18,7 +18,7 @@ export function UploadZone({ imageSrc, isProcessing, onFileSelect }: UploadZoneP
   return (
     <div
       onClick={() => fileInputRef.current?.click()}
-      className="relative group cursor-pointer border-2 border-dashed border-pink-200 rounded-2xl hover:border-pink-400 hover:bg-pink-50/50 transition-all aspect-[4/3] flex flex-col items-center justify-center overflow-hidden"
+      className="relative group cursor-pointer bg-white border-[2.5px] border-dashed border-ink/35 rounded-2xl hover:border-ink hover:bg-paper-deep/50 transition-all aspect-[4/3] flex flex-col items-center justify-center overflow-hidden"
     >
       <input
         type="file"
@@ -30,16 +30,16 @@ export function UploadZone({ imageSrc, isProcessing, onFileSelect }: UploadZoneP
       />
 
       {isProcessing ? (
-        <div className="flex flex-col items-center space-y-2 text-pink-500">
+        <div className="flex flex-col items-center space-y-2 text-cobalt">
           <Loader2 className="animate-spin" size={32} />
-          <span className="text-sm font-medium">Processing ink...</span>
+          <span className="text-sm font-label font-bold">Processing ink...</span>
         </div>
       ) : imageSrc ? (
         <img src={imageSrc} alt="Preview" className="w-full h-full object-contain" />
       ) : (
-        <div className="flex flex-col items-center space-y-4 text-pink-400 group-hover:text-pink-500 transition-colors">
-          <Camera size={48} strokeWidth={1.5} />
-          <span className="text-sm font-medium">Tap to snap your doodle</span>
+        <div className="flex flex-col items-center space-y-4 text-inksoft group-hover:text-ink transition-colors">
+          <Camera size={48} strokeWidth={1.75} />
+          <span className="text-sm font-label font-bold">Tap to snap your doodle</span>
         </div>
       )}
     </div>

@@ -20,34 +20,34 @@ export function AdminRoomsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-rose-50 to-pink-100 p-6">
+    <div className="paper-bg min-h-screen p-6 text-ink">
       <div className="max-w-3xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500">
+          <h1 className="font-display text-4xl font-black text-ink">
             Rooms
           </h1>
           <button
             onClick={handleLogout}
-            className="text-sm text-slate-500 hover:text-pink-500 transition-colors"
+            className="font-label text-sm text-inksoft hover:text-vermilion transition-colors underline decoration-2 underline-offset-4"
           >
             Sign out
           </button>
         </div>
 
         {loading ? (
-          <p className="text-slate-400 text-center mt-16">Loading...</p>
+          <p className="font-label text-inksoft text-center mt-16">Loading...</p>
         ) : rooms.length === 0 ? (
-          <p className="text-slate-400 text-center mt-16">No rooms found.</p>
+          <p className="font-label text-inksoft text-center mt-16">No rooms found.</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {rooms.map(room => (
               <button
                 key={room.room_id}
                 onClick={() => navigate(`/admin/rooms/${encodeURIComponent(room.room_id)}`)}
-                className="bg-white/80 backdrop-blur-xl rounded-2xl border border-white/50 p-6 text-left shadow hover:shadow-pink-200 hover:border-pink-200 transition-all"
+                className="sticker p-6 text-left hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform"
               >
-                <p className="font-bold text-slate-700 text-lg truncate">{room.room_id}</p>
-                <p className="text-sm text-slate-400 mt-1">{room.count} artwork{room.count !== 1 ? 's' : ''}</p>
+                <p className="font-display font-black text-ink text-xl truncate">{room.room_id}</p>
+                <p className="font-label text-sm text-inksoft mt-1">{room.count} artwork{room.count !== 1 ? 's' : ''}</p>
               </button>
             ))}
           </div>

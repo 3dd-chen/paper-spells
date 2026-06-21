@@ -19,15 +19,18 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-rose-50 to-pink-100 flex flex-col items-center justify-center p-6 text-slate-800">
+    <div className="paper-bg min-h-screen flex flex-col items-center justify-center p-6 text-ink">
       <Toaster position="top-center" richColors />
-      <div className="max-w-md w-full bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/50 p-8 space-y-8">
+      <div className="max-w-md w-full sticker p-8 space-y-8 relative">
+        <span className="ps-chip tilt-r absolute -top-3 -right-2 bg-sun text-ink text-[0.62rem] px-3 py-1">
+          Cast a spell
+        </span>
 
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500 tracking-tight">
-            Paper Spells
+          <h1 className="font-display text-[2.7rem] leading-[0.95] font-black text-ink tracking-tight">
+            Paper <span className="italic text-vermilion">Spells</span>
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-inksoft">
             Upload your paper drawing and watch it come alive!
           </p>
         </div>
@@ -44,7 +47,7 @@ export default function App() {
             <button
               onClick={handleUpload}
               disabled={!processedImage || isUploading}
-              className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-pink-500 to-violet-500 text-white font-semibold py-4 px-6 rounded-2xl shadow-lg shadow-pink-200 hover:shadow-pink-300 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ps-btn ps-btn-blue w-full flex items-center justify-center gap-2 py-4 px-6 text-base"
             >
               {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
               <span>{isUploading ? 'Magic happens...' : 'Animate It!'}</span>

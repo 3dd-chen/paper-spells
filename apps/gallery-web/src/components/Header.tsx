@@ -6,53 +6,33 @@ interface HeaderProps {
 
 export function Header({ spellCount, isLoaded, roomId }: HeaderProps) {
   return (
-    <div className="ui-container absolute top-0 left-0 w-full p-6 pointer-events-none flex justify-between items-start">
+    <div className="ui-container absolute top-0 left-0 w-full p-6 pointer-events-none flex justify-between items-start gap-4">
       <div className="pointer-events-auto">
-        <h1
-          className="text-4xl font-extrabold tracking-tight"
-          style={{
-            background: 'linear-gradient(to right, #ec4899, #8b5cf6)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
-        >
-          Paper Spells
+        <h1 className="font-display text-[2.6rem] leading-[0.9] font-black tracking-tight text-ink">
+          Paper <span className="italic text-vermilion">Spells</span>
         </h1>
         {roomId && (
-          <div className="mt-1 inline-block bg-pink-100 text-pink-600 px-2 py-0.5 rounded-md text-xs font-semibold uppercase tracking-wider border border-pink-200">
+          <div className="ps-chip tilt-r mt-2 inline-block bg-sun text-ink px-2.5 py-0.5 text-[0.62rem]">
             Room: {roomId}
           </div>
         )}
-        <p style={{ color: '#9d174d', fontSize: 14, marginTop: 4, opacity: 0.8 }}>
+        <p className="font-label text-sm text-inksoft mt-2">
           {spellCount} {spellCount === 1 ? 'spell' : 'spells'} alive • Click to feed!
         </p>
       </div>
 
-      <div
-        className="pointer-events-auto"
-        style={{
-          background: 'rgba(255,255,255,0.6)',
-          backdropFilter: 'blur(12px)',
-          border: '1.5px solid rgba(255,255,255,0.7)',
-          borderRadius: '16px',
-          padding: '8px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          boxShadow: '0 4px 16px rgba(236,72,153,0.1)',
-        }}
-      >
+      <div className="pointer-events-auto flex items-center gap-2.5 bg-card border-2 border-ink rounded-xl px-4 py-2 shadow-pop-sm">
         <div
           style={{
-            width: 10,
-            height: 10,
+            width: 11,
+            height: 11,
             borderRadius: '50%',
-            background: isLoaded ? '#ec4899' : '#d1d5db',
-            boxShadow: isLoaded ? '0 0 6px #ec4899' : 'none',
+            background: isLoaded ? '#f0411f' : '#a89f8e',
+            border: '2px solid #1c1813',
             animation: isLoaded ? 'pulse 2s infinite' : 'none',
           }}
         />
-        <span style={{ color: '#be185d', fontFamily: 'monospace', fontSize: 13, fontWeight: 600 }}>
+        <span className="font-label font-bold text-xs tracking-wider text-ink">
           {isLoaded ? 'GALLERY LIVE' : 'LOADING...'}
         </span>
       </div>

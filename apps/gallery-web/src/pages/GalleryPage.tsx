@@ -32,7 +32,7 @@ export function GalleryPage() {
 
   return (
     <div
-      className="relative min-h-screen w-full overflow-hidden bg-gradient-to-b from-rose-50 to-pink-100 cursor-crosshair"
+      className="paper-bg relative min-h-screen w-full overflow-hidden cursor-crosshair"
       onClick={handleClick}
     >
       {food && (
@@ -71,22 +71,12 @@ export function GalleryPage() {
 
       {isLoaded && videos.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div
-            style={{
-              background: 'rgba(255,255,255,0.7)',
-              backdropFilter: 'blur(16px)',
-              borderRadius: '24px',
-              border: '1.5px solid rgba(255,255,255,0.6)',
-              boxShadow: '0 8px 32px rgba(236,72,153,0.12)',
-              padding: '48px 64px',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🪄</div>
-            <p style={{ color: '#be185d', fontWeight: 600, fontSize: 18 }}>
+          <div className="sticker tilt-l px-16 py-12 text-center">
+            <div className="text-5xl mb-3 animate-bob inline-block">🪄</div>
+            <p className="font-display font-black text-2xl text-ink">
               No spells cast yet...
             </p>
-            <p style={{ color: '#9d174d', fontSize: 14, marginTop: 8, opacity: 0.7 }}>
+            <p className="text-sm text-inksoft mt-2">
               Upload a drawing to see it come alive here!
             </p>
           </div>

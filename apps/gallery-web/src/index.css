@@ -1,17 +1,184 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..700&family=Familjen+Grotesk:ital,wght@0,400..700;1,400..600&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap");
 @import "tailwindcss";
+
+/* ═══════════════════════════════════════════
+   Paper Spells — Paper & Ink Risograph
+   Bauhaus primaries printed on warm paper stock.
+   Hard sticker shadows · dashed cut-outs · ink rules.
+   ═══════════════════════════════════════════ */
+
+@theme {
+  --color-paper: #efe7d6;
+  --color-paper-deep: #e6dcc6;
+  --color-card: #fbf7ec;
+  --color-ink: #1c1813;
+  --color-inksoft: #6a6155;
+  --color-cobalt: #2f4fe6;
+  --color-vermilion: #f0411f;
+  --color-sun: #ffc23c;
+  --color-grape: #6b4de6;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Familjen Grotesk", system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, monospace;
+
+  --shadow-pop: 5px 5px 0 #1c1813;
+  --shadow-pop-lg: 8px 8px 0 #1c1813;
+  --shadow-pop-sm: 3px 3px 0 #1c1813;
+  --shadow-pop-blue: 5px 5px 0 #2f4fe6;
+}
 
 body {
   margin: 0;
   overflow: hidden;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background-color: var(--color-paper);
+}
+
+/* Warm paper canvas: grain + faint blueprint dots */
+.paper-bg {
+  background-color: var(--color-paper);
+  background-image:
+    radial-gradient(rgba(28, 24, 19, 0.05) 1px, transparent 1.4px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-size:
+    22px 22px,
+    180px 180px;
+}
+
+/* Sticker card — printed cut-out with a hard ink shadow */
+.sticker {
+  background: var(--color-card);
+  border: 2px solid var(--color-ink);
+  border-radius: 22px;
+  box-shadow: var(--shadow-pop-lg);
+}
+
+/* Buttons — chunky printed keys that depress on press */
+.ps-btn {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 2px solid var(--color-ink);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    filter 0.12s ease;
+  cursor: pointer;
+}
+.ps-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-pop-lg);
+}
+.ps-btn:active {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--color-ink);
+}
+.ps-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: var(--shadow-pop);
+}
+
+.ps-btn-ink {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+.ps-btn-blue {
+  background: var(--color-cobalt);
+  color: #fff;
+}
+.ps-btn-red {
+  background: var(--color-vermilion);
+  color: #fff;
+}
+
+/* Field — boxed ink input */
+.ps-field {
+  font-family: var(--font-mono);
+  background: #fff;
+  border: 2px solid var(--color-ink);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop-sm);
+  color: var(--color-ink);
+  outline: none;
+  transition:
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
+}
+.ps-field::placeholder {
+  color: #a89f8e;
+}
+.ps-field:focus {
+  box-shadow: var(--shadow-pop-blue);
+  transform: translate(-1px, -1px);
+}
+
+/* Small label chip */
+.ps-chip {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 2px solid var(--color-ink);
+  border-radius: 999px;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+.font-label {
+  font-family: var(--font-mono);
+}
+
+/* Decorative slight tilts */
+.tilt-l {
+  transform: rotate(-1.4deg);
+}
+.tilt-r {
+  transform: rotate(1.4deg);
 }
 
 @keyframes pop {
-  0%   { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-  50%  { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.3);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50%       { transform: scale(1.2); opacity: 0.7; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+@keyframes float-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1.4deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(-1.4deg);
+  }
+}
+.animate-bob {
+  animation: float-bob 5s ease-in-out infinite;
 }

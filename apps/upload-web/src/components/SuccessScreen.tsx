@@ -5,12 +5,12 @@ import { CheckCircle2 } from 'lucide-react';
  */
 export function SuccessScreen() {
   return (
-    <div className="flex flex-col items-center justify-center space-y-4 py-12">
-      <div className="w-16 h-16 bg-green-100 text-green-500 rounded-full flex items-center justify-center">
-        <CheckCircle2 size={32} />
+    <div className="flex flex-col items-center justify-center space-y-4 py-10">
+      <div className="w-20 h-20 bg-sun text-ink rounded-full border-2 border-ink shadow-pop flex items-center justify-center animate-bob">
+        <CheckCircle2 size={38} strokeWidth={2.25} />
       </div>
-      <p className="font-medium text-lg">Artwork Submitted!</p>
-      <p className="text-sm text-slate-500">Head to the Gallery to see it come alive.</p>
+      <p className="font-display font-black text-2xl text-ink">Artwork Submitted!</p>
+      <p className="text-sm text-inksoft">Head to the Gallery to see it come alive.</p>
     </div>
   );
 }

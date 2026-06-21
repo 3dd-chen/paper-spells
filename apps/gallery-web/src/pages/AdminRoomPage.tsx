@@ -40,7 +40,7 @@ function ChromaImage({ src }: { src: string }) {
 
   if (failed) return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span className="text-slate-300 text-xs">Image error</span>
+      <span className="font-label text-inksoft text-xs">Image error</span>
     </div>
   );
 
@@ -55,10 +55,10 @@ function ChromaImage({ src }: { src: string }) {
 // ── AdminRoomPage ────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
-  completed: 'bg-green-100 text-green-700',
-  generating: 'bg-yellow-100 text-yellow-700',
-  failed: 'bg-red-100 text-red-700',
-  pending: 'bg-slate-100 text-slate-500',
+  completed: 'bg-cobalt text-white border-ink',
+  generating: 'bg-sun text-ink border-ink',
+  failed: 'bg-vermilion text-white border-ink',
+  pending: 'bg-paper-deep text-inksoft border-ink',
 };
 
 const STATUS_ICONS: Record<string, string> = {
@@ -108,25 +108,25 @@ export function AdminRoomPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-rose-50 to-pink-100 p-6">
+    <div className="paper-bg min-h-screen p-6 text-ink">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center gap-3 mb-8">
           <button
             onClick={() => navigate('/admin/rooms')}
-            className="text-sm text-slate-400 hover:text-pink-500 transition-colors"
+            className="font-label text-sm text-inksoft hover:text-vermilion transition-colors"
           >
             ← Rooms
           </button>
-          <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500">
+          <h1 className="font-display text-3xl font-black text-ink">
             {roomId}
           </h1>
-          <span className="ml-auto text-sm text-slate-400">{artworks.length} items</span>
+          <span className="ml-auto font-label text-sm text-inksoft">{artworks.length} items</span>
         </div>
 
         {loading ? (
-          <p className="text-slate-400 text-center mt-16">Loading...</p>
+          <p className="font-label text-inksoft text-center mt-16">Loading...</p>
         ) : artworks.length === 0 ? (
-          <p className="text-slate-400 text-center mt-16">No artworks in this room.</p>
+          <p className="font-label text-inksoft text-center mt-16">No artworks in this room.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {artworks.map(artwork => {
@@ -136,15 +136,15 @@ export function AdminRoomPage() {
               return (
                 <div
                   key={artwork.id}
-                  className={`bg-white/80 backdrop-blur-xl rounded-2xl border overflow-hidden shadow transition-all ${artwork.hidden ? 'opacity-50 border-slate-200' : 'border-white/50'}`}
+                  className={`bg-card border-2 border-ink rounded-2xl overflow-hidden shadow-pop transition-all ${artwork.hidden ? 'opacity-50' : ''}`}
                 >
                   {/* Media Preview — checkered bg to show transparency */}
                   <div
-                    className="aspect-video relative overflow-hidden flex items-center justify-center"
+                    className="aspect-video relative overflow-hidden flex items-center justify-center border-b-2 border-ink"
                     style={{
                       background: videoSrc || imgSrc
-                        ? 'repeating-conic-gradient(#e2e8f0 0% 25%, #f8fafc 0% 50%) 0 0 / 16px 16px'
-                        : '#f1f5f9',
+                        ? 'repeating-conic-gradient(#e6dcc6 0% 25%, #fbf7ec 0% 50%) 0 0 / 16px 16px'
+                        : '#e6dcc6',
                     }}
                   >
                     {videoSrc ? (
@@ -152,9 +152,9 @@ export function AdminRoomPage() {
                     ) : imgSrc ? (
                       <ChromaImage src={imgSrc} />
                     ) : (
-                      <div className="flex flex-col items-center gap-1 text-slate-400">
+                      <div className="flex flex-col items-center gap-1 text-inksoft">
                         <span className="text-3xl">{STATUS_ICONS[artwork.status] ?? '🎨'}</span>
-                        <span className="text-xs capitalize">{artwork.status}</span>
+                        <span className="font-label text-xs capitalize">{artwork.status}</span>
                       </div>
                     )}
                   </div>
@@ -162,27 +162,27 @@ export function AdminRoomPage() {
                   {/* Info */}
                   <div className="p-3 space-y-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[artwork.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                      <span className={`font-label text-[0.65rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border-2 ${STATUS_COLORS[artwork.status] ?? 'bg-paper-deep text-inksoft border-ink'}`}>
                         {artwork.status}
                       </span>
                       {artwork.hidden
-                        ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-200 text-slate-500">hidden</span>
+                        ? <span className="font-label text-[0.65rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border-2 border-ink bg-paper-deep text-inksoft">hidden</span>
                         : null}
                     </div>
-                    <p className="text-xs text-slate-400 truncate">{artwork.created_at?.slice(0, 10)}</p>
+                    <p className="font-label text-xs text-inksoft truncate">{artwork.created_at?.slice(0, 10)}</p>
 
                     <div className="flex gap-2 pt-1">
                       <button
                         onClick={() => handleToggleHide(artwork)}
                         disabled={pendingId === artwork.id}
-                        className="flex-1 text-xs py-1.5 rounded-lg border border-slate-200 hover:border-pink-300 hover:text-pink-600 transition-colors disabled:opacity-40"
+                        className="font-label font-bold flex-1 text-xs py-1.5 rounded-lg border-2 border-ink hover:bg-ink hover:text-paper transition-colors disabled:opacity-40"
                       >
                         {artwork.hidden ? 'Show' : 'Hide'}
                       </button>
                       <button
                         onClick={() => handleDelete(artwork)}
                         disabled={pendingId === artwork.id}
-                        className="flex-1 text-xs py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                        className="font-label font-bold flex-1 text-xs py-1.5 rounded-lg border-2 border-vermilion text-vermilion hover:bg-vermilion hover:text-white transition-colors disabled:opacity-40"
                       >
                         Delete
                       </button>
