@@ -266,6 +266,11 @@ class GeminiVeoProvider(AIProvider):
             url = f"https://{self.settings.google_cloud_location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{self.settings.google_cloud_location}/publishers/google/models/{self.settings.veo_model_name}:predictLongRunning"
             token = await get_access_token(self.settings, self.http_client, self.token_store)
 
+            # Detect mime type based on image header to prevent decoder artifacts
+            mime_type = "image/png"
+            if image_bytes.startswith(b'\xff\xd8'):
+                mime_type = "image/jpeg"
+
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
 
             headers = {
@@ -278,7 +283,7 @@ class GeminiVeoProvider(AIProvider):
                         "prompt": final_prompt,
                         "image": {
                             "bytesBase64Encoded": image_b64,
-                            "mimeType": "image/png"
+                            "mimeType": mime_type
                         }
                     }
                 ],

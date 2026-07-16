@@ -318,6 +318,37 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/debug-status")
+async def debug_status(
+    task_id: str,
+    request: Request,
+    provider: AIProvider = Depends(get_provider),
+):
+    if not isinstance(provider, GeminiVeoProvider):
+        return {"error": "Not a Gemini provider"}
+    
+    from app.providers.gcp_auth import get_access_token
+    import json
+    
+    project_id = provider.settings.gcp_project_id
+    parts = task_id.rpartition('/operations/')
+    resource_name = parts[0] if parts[1] else task_id
+    url = f"https://{provider.settings.google_cloud_location}-aiplatform.googleapis.com/v1beta1/{resource_name}:fetchPredictOperation"
+    token = await get_access_token(provider.settings, provider.http_client, provider.token_store)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "operationName": task_id
+    }
+    try:
+        res_json = await provider.http_client.post_json(url, headers, payload)
+        return res_json
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ── Admin Routes ─────────────────────────────────────────────────────────────
 
 @app.post("/api/admin/login", response_model=AdminLoginResponse)
