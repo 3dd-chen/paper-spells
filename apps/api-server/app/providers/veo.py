@@ -155,12 +155,7 @@ class GeminiVeoProvider(AIProvider):
                 generation_config = {
                     "responseModalities": ["TEXT", "IMAGE"],
                     "imageConfig": {
-                        "aspectRatio": "auto",
-                        "imageSize": "1K",
-                        "imageOutputOptions": {
-                            "mimeType": "image/jpeg"
-                        },
-                        "personGeneration": "ALLOW_ALL"
+                        "aspectRatio": "auto"
                     }
                 }
                 config_key = "generationConfig"
@@ -169,12 +164,7 @@ class GeminiVeoProvider(AIProvider):
                 generation_config = {
                     "response_modalities": ["TEXT", "IMAGE"],
                     "image_config": {
-                        "aspect_ratio": "auto",
-                        "image_size": "1K",
-                        "image_output_options": {
-                            "mime_type": "image/jpeg"
-                        },
-                        "person_generation": "ALLOW_ALL"
+                        "aspect_ratio": "auto"
                     }
                 }
                 config_key = "generation_config"
