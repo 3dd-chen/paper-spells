@@ -284,23 +284,8 @@ async def get_gallery(
     request: Request,
     room_id: str = "default",
     repo: ArtworkRepository = Depends(get_repo),
-    provider: AIProvider = Depends(get_provider),
 ) -> List[GalleryItem]:
-    generating = await repo.get_all_generating(room_id)
-    env = request.scope.get("env", None)
-
-    for artwork in generating:
-        if not artwork["provider_task_id"]:
-            continue
-        try:
-            result = await provider.check_status(artwork["provider_task_id"], env=env)
-            if result.status == ProviderStatus.COMPLETED and result.video_url:
-                await repo.update_to_completed(artwork["id"], result.video_url, result.facing_direction)
-            elif result.status == ProviderStatus.FAILED:
-                await repo.update_to_failed(artwork["id"])
-        except Exception as e:
-            logger.error(f"Error checking status for {artwork['id']}: {e}")
-
+    """Return only completed artworks. Fast DB-only read — no external calls."""
     completed = await repo.get_all_completed(room_id)
     return [
         GalleryItem(
@@ -311,6 +296,40 @@ async def get_gallery(
         )
         for a in completed
     ]
+
+
+@app.post("/api/poll")
+async def poll_generating(
+    request: Request,
+    room_id: str = "default",
+    repo: ArtworkRepository = Depends(get_repo),
+    provider: AIProvider = Depends(get_provider),
+):
+    """Check Veo status for generating artworks and update DB.
+    Call this less frequently (e.g. every 10-15s) rather than on every gallery refresh.
+    """
+    generating = await repo.get_all_generating(room_id)
+    env = request.scope.get("env", None)
+    updated = []
+
+    for artwork in generating:
+        if not artwork["provider_task_id"]:
+            continue
+        try:
+            result = await provider.check_status(artwork["provider_task_id"], env=env)
+            if result.status == ProviderStatus.COMPLETED and result.video_url:
+                await repo.update_to_completed(artwork["id"], result.video_url, result.facing_direction)
+                updated.append({"id": artwork["id"], "status": "completed"})
+            elif result.status == ProviderStatus.FAILED:
+                await repo.update_to_failed(artwork["id"])
+                updated.append({"id": artwork["id"], "status": "failed"})
+            else:
+                updated.append({"id": artwork["id"], "status": "generating"})
+        except Exception as e:
+            logger.error(f"poll: error checking status for {artwork['id']}: {e}")
+            updated.append({"id": artwork["id"], "status": "error", "error": str(e)})
+
+    return {"checked": len(updated), "results": updated}
 
 
 @app.get("/api/health")
@@ -388,7 +407,7 @@ async def admin_get_room(
     provider: AIProvider = Depends(get_provider),
     _=Depends(require_admin),
 ):
-    # Check and update any generating artworks in this room (matching /api/gallery)
+    # Check and update any generating artworks in this room
     generating = await repo.get_all_generating(room_id)
     env = request.scope.get("env", None)
 
