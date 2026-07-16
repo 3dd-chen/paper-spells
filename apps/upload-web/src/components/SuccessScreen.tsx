@@ -9,8 +9,8 @@ export function SuccessScreen() {
       <div className="w-20 h-20 bg-sun text-ink rounded-full border-2 border-ink shadow-pop flex items-center justify-center animate-bob">
         <CheckCircle2 size={38} strokeWidth={2.25} />
       </div>
-      <p className="font-display font-black text-2xl text-ink">Artwork Submitted!</p>
-      <p className="text-sm text-inksoft">Head to the Gallery to see it come alive.</p>
+      <p className="font-display font-black text-2xl text-white">Artwork Submitted!</p>
+      <p className="text-sm text-white/70">Head to the Gallery to see it come alive.</p>
     </div>
   );
 }

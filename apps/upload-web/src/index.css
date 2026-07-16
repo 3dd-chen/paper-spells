@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..700&family=Familjen+Grotesk:ital,wght@0,400..700;1,400..600&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..700&family=Familjen+Grotesk:ital,wght@0,400..700;1,400..600&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap");
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════
@@ -154,3 +154,66 @@ body {
 .animate-bob {
   animation: float-bob 5s ease-in-out infinite;
 }
+
+/* Luminous cosmic background (transparent mesh + sci-fi grid, no heavy noise) */
+.cosmic-bg {
+  background-color: #03010a;
+  background-image:
+    /* Glow highlights */
+    radial-gradient(circle at 10% 20%, rgba(138, 43, 226, 0.2) 0%, transparent 45%),
+    radial-gradient(circle at 90% 80%, rgba(0, 245, 255, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(255, 0, 128, 0.12) 0%, transparent 40%),
+    /* Luminous sci-fi digital grid */
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    40px 40px,
+    40px 40px;
+  position: relative;
+}
+
+/* Star Wars style typography and neon glow effects */
+.starwars-text {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #ffe81f;
+  text-shadow: 
+    0 0 8px rgba(255, 232, 31, 0.5),
+    0 0 20px rgba(255, 232, 31, 0.25);
+}
+
+@keyframes twinkle {
+  0%, 100% {
+    opacity: 0.15;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.2);
+  }
+}
+
+.star-twinkle {
+  animation: twinkle var(--twinkle-duration, 3s) ease-in-out infinite;
+}
+
+/* Glassmorphic card for space theme */
+.cosmic-card {
+  background: rgba(8, 5, 20, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 2.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
+}
+.cosmic-card:hover {
+  border-color: rgba(255, 232, 31, 0.35);
+  box-shadow: 0 12px 40px 0 rgba(255, 232, 31, 0.08);
+}
+

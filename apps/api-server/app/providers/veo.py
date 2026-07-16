@@ -45,11 +45,13 @@ def _terminal_http_status(exc_message: str) -> int | None:
 
 
 class GeminiVeoProvider(AIProvider):
+    _global_token_store = {"token": None, "expiry": 0}
+
     def __init__(self, settings: Settings, http_client: HttpClientInterface, storage: StorageInterface | None = None) -> None:
         self.settings = settings
         self.http_client = http_client
         self.storage = storage
-        self.token_store = {"token": None, "expiry": 0}
+        self.token_store = self._global_token_store
 
     async def analyze_image_direction(self, image_bytes: bytes, env: Any = None) -> dict[str, str]:
         """Analyze the image to determine if the character is facing left or right and get a description."""
@@ -119,40 +121,131 @@ class GeminiVeoProvider(AIProvider):
 
     # ── submit ────────────────────────────────────────────────────────────────
 
+    async def _generate_helmet_image(self, image_bytes: bytes, character_description: str, env: Any = None) -> bytes:
+        """Add a space helmet to the character using the gemini-3.1-flash-lite-image model."""
+        model_name = "gemini-3.1-flash-lite-image"
+        logger.info(f"Adding space helmet with {model_name}")
+        project_id = self.settings.gcp_project_id
+        
+        prompt_text = (
+            "Add a round transparent glass space helmet bubble that completely encloses the character's entire head, including any ears or top features. "
+            "Add a simple space suit collar base at the bottom of the helmet, resting at the neck or base of the head. "
+            "Both the helmet bubble and the collar base must be drawn as simple black outline doodles, matching the hand-drawn marker line weight and style of the original character. "
+            "No 3D rendering, no realistic textures, no color gradients, and no shading."
+        )
+
+        try:
+            api_key = self.settings.gemini_api_key
+
+            if api_key:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                headers = {"Content-Type": "application/json"}
+            else:
+                url = f"https://{self.settings.google_cloud_location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{self.settings.google_cloud_location}/publishers/google/models/{model_name}:generateContent"
+                token = await get_access_token(self.settings, self.http_client, self.token_store)
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}"
+                }
+
+            image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"inline_data": {"mime_type": "image/png", "data": image_b64}},
+                            {"text": prompt_text}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "responseModalities": ["TEXT", "IMAGE"],
+                    "imageConfig": {
+                        "aspectRatio": "auto",
+                        "imageSize": "1K",
+                        "imageOutputOptions": {
+                            "mimeType": "image/jpeg"
+                        },
+                        "personGeneration": "ALLOW_ALL"
+                    }
+                }
+            }
+
+            res_json = await self.http_client.post_json(url, headers, payload)
+            
+            candidates = res_json.get("candidates", [])
+            if not candidates:
+                raise ValueError("No candidates returned from Imagen model")
+            
+            parts = candidates[0].get("content", {}).get("parts", [])
+            
+            image_part = None
+            for p in parts:
+                if "inlineData" in p or "inline_data" in p:
+                    image_part = p
+                    break
+            
+            if not image_part:
+                raise ValueError("No image part returned in candidates. Response: " + json.dumps(res_json))
+            
+            inline_data = image_part.get("inlineData") or image_part.get("inline_data")
+            img_b64 = inline_data.get("data")
+            if not img_b64:
+                raise ValueError("Image data is empty in response part")
+            
+            logger.info("Successfully added space helmet via gemini-3.1-flash-lite-image")
+            return base64.b64decode(img_b64)
+
+        except Exception as e:
+            logger.error(f"Failed to generate helmet image, falling back to original. Error: {e}")
+            return image_bytes
+
+    # ── submit ────────────────────────────────────────────────────────────────
+
     async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None, original_direction: str | None = None, character_description: str | None = None) -> tuple[str, str | None]:
         project_id = self.settings.gcp_project_id
+        char_desc = character_description or "a simple black stick figure"
 
-        # 1. Upload original image to R2 for archival
+        # 1. Archive the raw original image upload (for safety/history)
         if self.storage:
             try:
-                await self.storage.upload_bytes(f"images/{file_id}.png", image_bytes)
+                await self.storage.upload_bytes(f"images/{file_id}_raw.png", image_bytes)
             except Exception as e:
-                logger.error(f"Failed to upload image to storage: {e}")
+                logger.error(f"Failed to upload raw original image to storage: {e}")
+
+        # 2. Add the space helmet to the drawing synchronously (takes 3-4s)
+        helmet_image_bytes = await self._generate_helmet_image(image_bytes, char_desc, env)
+
+        # 3. Upload the edited helmet image as the main reference (so gallery preview shows the helmet!)
+        if self.storage:
+            try:
+                await self.storage.upload_bytes(f"images/{file_id}.png", helmet_image_bytes)
+            except Exception as e:
+                logger.error(f"Failed to upload edited helmet image to storage: {e}")
         else:
-            logger.info("Storage interface not provided. Skipping image archival upload.")
+            logger.info("Storage interface not provided. Skipping image upload.")
 
-        # 2. Dynamic robust prompt based on character description (lively natural motion for any drawing shape!)
-        char_desc = character_description or "a simple black stick figure"
-        action = "moving and animating naturally with lively motion, bringing the drawing to life"
-        custom_prompt = f"{char_desc} {action} on a solid green background, no text, no watermarks, no captions, no letters"
+        # 4. Build a concise, motion-focused prompt for Veo
+        custom_prompt = (
+            f"{char_desc} wearing its glass space helmet, "
+            "glowing neon outline style, "
+            "walking forward naturally on a solid green background"
+        )
 
-        # 3. Submit to Veo
-        operation_name = await self._submit_to_veo(custom_prompt, image_bytes, project_id, aspect_ratio, file_id, env)
+        # 5. Submit the edited image to Veo for animation
+        operation_name = await self._submit_to_veo(custom_prompt, helmet_image_bytes, project_id, aspect_ratio, file_id, env)
 
         return operation_name, original_direction
 
     async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
-        """Submit to Veo with a direction-neutral prompt."""
+        """Submit to Veo with a concise, focused prompt."""
         
         final_prompt = (
             f"{custom_prompt}. "
-            "Animate the character moving forward and animating naturally in the direction it is naturally facing in the starting image. "
-            "Strictly maintain the exact 2D black and white line art drawing style of the first frame throughout the entire video. "
-            "Static camera, locked background, side-view perspective. "
-            "Do not turn the character around, do not rotate 180 degrees, do not change facing direction at any point. "
-            "Keep the character shape, topology, and lines perfectly consistent. "
-            "No text, no watermarks, no captions. "
-            "Animation starts seamlessly from the provided image as the exact first frame. Smooth motion."
+            "Starts seamlessly from the provided image as the first frame. "
+            "Static camera, side-view. Smooth looping animation."
         )
         logger.info(f"Final Veo prompt: {final_prompt}")
 
@@ -183,12 +276,9 @@ class GeminiVeoProvider(AIProvider):
                     "resolution": "720p",
                     "fps": 24,
                     "negativePrompt": (
-                        "turning around, spinning, looking backwards, changing facing direction, "
-                        "rotating 180 degrees, turning back, flipping direction, "
-                        "camera movement, zoom, pan, tilt, rotation, moving camera, dynamic camera angles, "
-                        "text, watermark, caption, letters, numbers, subtitle, signature, logo, "
-                        "3d render, shading, shadows, gradients, volumetric lighting, "
-                        "audio, sound, speech, photorealistic, style change, character redesign"
+                        "text, watermark, caption, logo, "
+                        "camera movement, zoom, pan, "
+                        "photorealistic, 3d render"
                     )
                 }
             }

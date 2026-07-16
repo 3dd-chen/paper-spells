@@ -12,5 +12,5 @@ export function useGalleryPolling() {
   });
 
   const videos = data?.filter(v => v.video_url) || [];
-  return { videos, isLoaded: !!data || !!error };
+  return { videos, isLoaded: !!data || !!error, error };
 }

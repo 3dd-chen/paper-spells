@@ -23,7 +23,6 @@ export function UploadZone({ imageSrc, isProcessing, onFileSelect }: UploadZoneP
       <input
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         ref={fileInputRef}
         onChange={onFileSelect}

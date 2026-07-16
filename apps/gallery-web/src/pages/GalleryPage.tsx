@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useGalleryPolling } from '../hooks/useGalleryPolling';
 import { usePhysicsEngine } from '../hooks/usePhysicsEngine';
 import { ChromaVideo } from '../components/ChromaVideo';
@@ -9,9 +9,20 @@ import { resolveVideoUrl } from '../lib/videoUrl';
 export function GalleryPage() {
   const roomId = new URLSearchParams(window.location.search).get('room');
 
-  const { videos, isLoaded } = useGalleryPolling();
+  const { videos, isLoaded, error } = useGalleryPolling();
   const [food, setFood] = useState<{ x: number; y: number; id: number } | null>(null);
   const { instancesRef, foodRef, initInstance } = usePhysicsEngine(() => setFood(null));
+
+  const stars = useMemo(() => {
+    return Array.from({ length: 40 }).map((_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 100}%`,
+      size: Math.random() * 3 + 1, // 1px to 4px
+      duration: `${Math.random() * 4 + 2}s`, // 2s to 6s
+      delay: `${Math.random() * 5}s`,
+    }));
+  }, []);
 
   const handleClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.ui-container')) return;
@@ -32,9 +43,25 @@ export function GalleryPage() {
 
   return (
     <div
-      className="paper-bg relative min-h-screen w-full overflow-hidden cursor-crosshair"
+      className="cosmic-bg relative min-h-screen w-full overflow-hidden cursor-crosshair"
       onClick={handleClick}
     >
+      {/* Background Twinkling Stars */}
+      {stars.map((star) => (
+        <div
+          key={star.id}
+          className="star-twinkle absolute rounded-full bg-white pointer-events-none"
+          style={{
+            left: star.left,
+            top: star.top,
+            width: star.size,
+            height: star.size,
+            '--twinkle-duration': star.duration,
+            animationDelay: star.delay,
+            boxShadow: star.size > 2.5 ? '0 0 8px rgba(255, 255, 255, 0.8)' : 'none',
+          } as React.CSSProperties}
+        />
+      ))}
       {food && (
         <div
           key={food.id}
@@ -76,7 +103,7 @@ export function GalleryPage() {
         );
       })}
 
-      {isLoaded && videos.length === 0 && (
+      {isLoaded && !error && videos.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="sticker tilt-l px-16 py-12 text-center">
             <svg width="60" height="60" viewBox="0 0 32 32" className="mb-4 animate-bob inline-block" aria-hidden="true">
