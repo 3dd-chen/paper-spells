@@ -121,10 +121,10 @@ class GeminiVeoProvider(AIProvider):
 
     # ── submit ────────────────────────────────────────────────────────────────
 
-    async def _generate_helmet_image(self, image_bytes: bytes, character_description: str, env: Any = None) -> bytes:
+    async def _generate_helmet_image(self, image_bytes: bytes, character_description: str, aspect_ratio: str = "16:9", env: Any = None) -> bytes:
         """Add a space helmet to the character using the gemini-3.1-flash-lite-image model."""
         model_name = "gemini-3.1-flash-lite-image"
-        logger.info(f"Adding space helmet with {model_name}")
+        logger.info(f"Adding space helmet with {model_name} (ratio: {aspect_ratio})")
         project_id = self.settings.gcp_project_id
         
         prompt_text = (
@@ -150,12 +150,16 @@ class GeminiVeoProvider(AIProvider):
 
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
 
+            # Validate and fallback aspect ratio against the model's supported enums
+            supported_ratios = {'1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'}
+            target_ratio = aspect_ratio if aspect_ratio in supported_ratios else "16:9"
+
             # Dynamically format payload keys to prevent protobuf parser failures
             if api_key:
                 generation_config = {
                     "responseModalities": ["TEXT", "IMAGE"],
                     "imageConfig": {
-                        "aspectRatio": "auto"
+                        "aspectRatio": target_ratio
                     }
                 }
                 config_key = "generationConfig"
@@ -164,7 +168,7 @@ class GeminiVeoProvider(AIProvider):
                 generation_config = {
                     "response_modalities": ["TEXT", "IMAGE"],
                     "image_config": {
-                        "aspect_ratio": "auto"
+                        "aspect_ratio": target_ratio
                     }
                 }
                 config_key = "generation_config"
@@ -225,7 +229,7 @@ class GeminiVeoProvider(AIProvider):
                 logger.error(f"Failed to upload raw original image to storage: {e}")
 
         # 2. Add the space helmet to the drawing synchronously (takes 3-4s)
-        helmet_image_bytes = await self._generate_helmet_image(image_bytes, char_desc, env)
+        helmet_image_bytes = await self._generate_helmet_image(image_bytes, char_desc, aspect_ratio, env)
 
         # 3. Upload the edited helmet image as the main reference (so gallery preview shows the helmet!)
         if self.storage:
