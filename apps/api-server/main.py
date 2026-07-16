@@ -57,6 +57,28 @@ class LoggingASGIMiddleware:
 
         method = scope["method"]
         path = scope["path"]
+
+        # Block common vulnerability scanners (/.env, /.git, /wp-admin, etc.)
+        path_lower = path.lower()
+        scanner_keywords = {
+            ".env", ".git", "wp-admin", "wordpress", "phpmyadmin",
+            "xmlrpc", "cgi-bin", "config.php", "setup.php", "backup"
+        }
+        if any(kw in path_lower for kw in scanner_keywords):
+            logger.warning(f"Blocked scanner request: {method} {path}")
+            await send({
+                "type": "http.response.start",
+                "status": 403,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                ]
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b'{"detail":"Access denied"}'
+            })
+            return
+
         query = scope["query_string"].decode("utf-8")
         query_str = f"?{query}" if query else ""
 
