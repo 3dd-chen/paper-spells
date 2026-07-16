@@ -150,17 +150,9 @@ class GeminiVeoProvider(AIProvider):
 
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
 
-            payload = {
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [
-                            {"inline_data": {"mime_type": "image/png", "data": image_b64}},
-                            {"text": prompt_text}
-                        ]
-                    }
-                ],
-                "generationConfig": {
+            # Dynamically format payload keys to prevent protobuf parser failures
+            if api_key:
+                generation_config = {
                     "responseModalities": ["TEXT", "IMAGE"],
                     "imageConfig": {
                         "aspectRatio": "auto",
@@ -171,6 +163,33 @@ class GeminiVeoProvider(AIProvider):
                         "personGeneration": "ALLOW_ALL"
                     }
                 }
+                config_key = "generationConfig"
+            else:
+                # Vertex AI (aiplatform.googleapis.com) strictly requires snake_case
+                generation_config = {
+                    "response_modalities": ["TEXT", "IMAGE"],
+                    "image_config": {
+                        "aspect_ratio": "auto",
+                        "image_size": "1K",
+                        "image_output_options": {
+                            "mime_type": "image/jpeg"
+                        },
+                        "person_generation": "ALLOW_ALL"
+                    }
+                }
+                config_key = "generation_config"
+
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"inline_data": {"mime_type": "image/png", "data": image_b64}},
+                            {"text": prompt_text}
+                        ]
+                    }
+                ],
+                config_key: generation_config
             }
 
             res_json = await self.http_client.post_json(url, headers, payload)
