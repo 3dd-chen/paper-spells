@@ -207,13 +207,16 @@ class GeminiVeoProvider(AIProvider):
             img_b64 = inline_data.get("data")
             if not img_b64:
                 raise ValueError("Image data is empty in response part")
-            
-            logger.info("Successfully added space helmet via gemini-3.1-flash-lite-image")
-            return base64.b64decode(img_b64)
+
+            # Use the mimeType from Imagen's response directly — this is the source of truth.
+            img_mime_type = inline_data.get("mimeType") or inline_data.get("mime_type") or "image/jpeg"
+
+            logger.info(f"Successfully added space helmet via gemini-3.1-flash-lite-image (mime={img_mime_type})")
+            return base64.b64decode(img_b64), img_mime_type
 
         except Exception as e:
             logger.error(f"Failed to generate helmet image, falling back to original. Error: {e}")
-            return image_bytes
+            return image_bytes, "image/png"
 
     # ── submit ────────────────────────────────────────────────────────────────
 
@@ -229,7 +232,7 @@ class GeminiVeoProvider(AIProvider):
                 logger.error(f"Failed to upload raw original image to storage: {e}")
 
         # 2. Add the space helmet to the drawing synchronously (takes 3-4s)
-        helmet_image_bytes = await self._generate_helmet_image(image_bytes, char_desc, aspect_ratio, env)
+        helmet_image_bytes, helmet_mime_type = await self._generate_helmet_image(image_bytes, char_desc, aspect_ratio, env)
 
         # 3. Upload the edited helmet image as the main reference (so gallery preview shows the helmet!)
         if self.storage:
@@ -248,11 +251,11 @@ class GeminiVeoProvider(AIProvider):
         )
 
         # 5. Submit the edited image to Veo for animation
-        operation_name = await self._submit_to_veo(custom_prompt, helmet_image_bytes, project_id, aspect_ratio, file_id, env)
+        operation_name = await self._submit_to_veo(custom_prompt, helmet_image_bytes, helmet_mime_type, project_id, aspect_ratio, file_id, env)
 
         return operation_name, original_direction
 
-    async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
+    async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, image_mime_type: str, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
         """Submit to Veo with a concise, focused prompt."""
         
         final_prompt = (
@@ -266,11 +269,6 @@ class GeminiVeoProvider(AIProvider):
             url = f"https://{self.settings.google_cloud_location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{self.settings.google_cloud_location}/publishers/google/models/{self.settings.veo_model_name}:predictLongRunning"
             token = await get_access_token(self.settings, self.http_client, self.token_store)
 
-            # Detect mime type based on image header to prevent decoder artifacts
-            mime_type = "image/png"
-            if image_bytes.startswith(b'\xff\xd8'):
-                mime_type = "image/jpeg"
-
             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
 
             headers = {
@@ -283,7 +281,7 @@ class GeminiVeoProvider(AIProvider):
                         "prompt": final_prompt,
                         "image": {
                             "bytesBase64Encoded": image_b64,
-                            "mimeType": mime_type
+                            "mimeType": image_mime_type
                         }
                     }
                 ],
