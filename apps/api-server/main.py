@@ -467,22 +467,33 @@ async def admin_delete_artwork(
     if not artwork:
         raise HTTPException(status_code=404, detail="Artwork not found")
 
-    # Clean up R2 files
+    # Clean up R2 files (including original image, video, helmet versions, and legacy raw backups)
     env = request.scope.get("env", None)
     if env and hasattr(env, "BUCKET"):
         storage = CloudflareR2Storage(env.BUCKET)
-        for key in [artwork.get("image_path"), artwork.get("video_url")]:
-            if key:
-                # Extract correct R2 key (e.g. 'images/...' or 'videos/...') from full URL or domain prefix
+        
+        # Build collection of keys to delete
+        keys_to_delete = []
+        
+        # Add main image and video if present in D1
+        for url in [artwork.get("image_path"), artwork.get("video_url")]:
+            if url:
                 for prefix in ["images/", "videos/"]:
-                    idx = key.find(prefix)
+                    idx = url.find(prefix)
                     if idx != -1:
-                        key = key[idx:]
+                        keys_to_delete.append(url[idx:])
                         break
-                try:
-                    await storage.delete(key)
-                except Exception as e:
-                    logger.warning(f"[admin] Failed to delete R2 key {key}: {e}")
+                        
+        # Add generated helmet variations and legacy raw paths to ensure full cleanup
+        keys_to_delete.append(f"images/{artwork_id}_helmet.png")
+        keys_to_delete.append(f"images/{artwork_id}_helmet.jpg")
+        keys_to_delete.append(f"images/{artwork_id}_raw.png")
+        
+        for key in keys_to_delete:
+            try:
+                await storage.delete(key)
+            except Exception as e:
+                logger.warning(f"[admin] Failed to delete R2 key {key}: {e}")
 
     return {"status": "deleted"}
 

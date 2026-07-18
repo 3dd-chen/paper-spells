@@ -224,24 +224,25 @@ class GeminiVeoProvider(AIProvider):
         project_id = self.settings.gcp_project_id
         char_desc = character_description or "a simple black stick figure"
 
-        # 1. Archive the raw original image upload (for safety/history)
+        # 1. Save the original raw image upload as the main reference images/{file_id}.png
         if self.storage:
             try:
-                await self.storage.upload_bytes(f"images/{file_id}_raw.png", image_bytes)
+                await self.storage.upload_bytes(f"images/{file_id}.png", image_bytes)
             except Exception as e:
-                logger.error(f"Failed to upload raw original image to storage: {e}")
+                logger.error(f"Failed to upload original image to storage: {e}")
+        else:
+            logger.info("Storage interface not provided. Skipping image upload.")
 
         # 2. Add the space helmet to the drawing synchronously (takes 3-4s)
         helmet_image_bytes, helmet_mime_type = await self._generate_helmet_image(image_bytes, char_desc, aspect_ratio, env)
 
-        # 3. Upload the edited helmet image as the main reference (so gallery preview shows the helmet!)
+        # 3. Upload the edited helmet image as a temporary Veo reference (images/{file_id}_helmet.png/jpg)
         if self.storage:
             try:
-                await self.storage.upload_bytes(f"images/{file_id}.png", helmet_image_bytes)
+                ext = "jpg" if "jpeg" in helmet_mime_type.lower() else "png"
+                await self.storage.upload_bytes(f"images/{file_id}_helmet.{ext}", helmet_image_bytes)
             except Exception as e:
-                logger.error(f"Failed to upload edited helmet image to storage: {e}")
-        else:
-            logger.info("Storage interface not provided. Skipping image upload.")
+                logger.error(f"Failed to upload helmet image to storage: {e}")
 
         # 4. Build a concise, motion-focused prompt for Veo
         custom_prompt = (
