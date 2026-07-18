@@ -15,6 +15,7 @@ from app.schemas import (
     UploadRequest, UploadResponse, GalleryItem,
     AnalyzeDirectionRequest, AnalyzeDirectionResponse,
     AdminLoginRequest, AdminLoginResponse, AdminArtworkItem, AdminRoomItem,
+    RegenerateRequest,
 )
 from app.core.config import Settings
 from app.interfaces.storage import CloudflareR2Storage
@@ -243,7 +244,7 @@ async def upload_artwork(
 
     try:
         env = request.scope.get("env", None)
-        provider_task_id, facing_direction = await provider.submit(
+        provider_task_id, facing_direction, helmet_image_path = await provider.submit(
             image_bytes=image_bytes,
             file_id=file_id,
             aspect_ratio=req.aspect_ratio,
@@ -252,7 +253,7 @@ async def upload_artwork(
             character_description=req.character_description
         )
         logger.info(f"Provider accepted task: {provider_task_id}, direction: {facing_direction}")
-        await repo.update_to_generating(artwork["id"], provider_task_id, facing_direction)
+        await repo.update_to_generating(artwork["id"], provider_task_id, facing_direction, helmet_image_path)
         return UploadResponse(task_id=artwork["id"], status="generating")
     except Exception as e:
         logger.error(f"Provider error for artwork {artwork['id']}: {type(e).__name__}: {e}")
@@ -427,6 +428,7 @@ async def admin_get_room(
             hidden=int(a.get("hidden") or 0),
             video_url=str(a["video_url"]) if a.get("video_url") else None,
             image_path=str(a["image_path"]) if a.get("image_path") else None,
+            helmet_image_path=str(a["helmet_image_path"]) if a.get("helmet_image_path") else None,
             facing_direction=str(a["facing_direction"]) if a.get("facing_direction") else None,
             created_at=str(a["created_at"]) if a.get("created_at") else None,
         )
@@ -453,6 +455,143 @@ async def admin_unhide_artwork(
 ):
     await repo.set_hidden(artwork_id, False)
     return {"status": "visible"}
+
+
+def get_png_ratio(data: bytes) -> str:
+    """Helper to detect aspect ratio from PNG binary data headers."""
+    if data.startswith(b'\x89PNG\r\n\x1a\n') and len(data) >= 24:
+        w = int.from_bytes(data[16:20], byteorder="big")
+        h = int.from_bytes(data[20:24], byteorder="big")
+        return "9:16" if h > w else "16:9"
+    return "16:9"
+
+
+@app.post("/api/admin/artworks/{artwork_id}/regenerate")
+async def admin_regenerate_artwork(
+    artwork_id: str,
+    req: RegenerateRequest,
+    request: Request,
+    repo: ArtworkRepository = Depends(get_repo),
+    provider: AIProvider = Depends(get_provider),
+    _=Depends(require_admin),
+):
+    artwork = await repo.get_by_id(artwork_id)
+    if not artwork:
+        raise HTTPException(status_code=404, detail="Artwork not found")
+
+    env = request.scope.get("env", None)
+    if not env or not hasattr(env, "BUCKET"):
+        raise HTTPException(status_code=500, detail="R2 storage binding not found")
+    storage = CloudflareR2Storage(env.BUCKET)
+
+    # 1. Resolve raw original image path
+    image_url = artwork.get("image_path")
+    if not image_url:
+        raise HTTPException(status_code=400, detail="Artwork record has no image_path")
+    idx = image_url.find("images/")
+    if idx == -1:
+        raise HTTPException(status_code=400, detail="Invalid image URL structure")
+    original_image_key = image_url[idx:]
+
+    try:
+        # Download original image bytes (required for both paths)
+        original_image_bytes = await storage.download_bytes(original_image_key)
+    except Exception as e:
+        logger.error(f"Regenerate: failed to download original image {original_image_key}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read source image from storage: {e}")
+
+    aspect_ratio = get_png_ratio(original_image_bytes)
+    facing_direction = artwork.get("facing_direction")
+    helmet_image_path = artwork.get("helmet_image_path")
+
+    # Force fallback to full regeneration if user requested video-only but no helmet image exists
+    regen_type = req.type
+    if regen_type == "video" and not helmet_image_path:
+        logger.info("Regenerate: video-only requested but no helmet image path exists. Falling back to full.")
+        regen_type = "full"
+
+    try:
+        if regen_type == "full":
+            # --- FULL REGENERATION (Stage 1 + Stage 2) ---
+            # 1. Clean up old helmet file and video file from R2
+            for url in [helmet_image_path, artwork.get("video_url")]:
+                if url:
+                    for prefix in ["images/", "videos/"]:
+                        i = url.find(prefix)
+                        if i != -1:
+                            try:
+                                await storage.delete(url[i:])
+                            except Exception:
+                                pass
+
+            # 2. Run both stages synchronously
+            provider_task_id, facing_direction, helmet_image_path = await provider.submit(
+                image_bytes=original_image_bytes,
+                file_id=artwork_id,
+                aspect_ratio=aspect_ratio,
+                env=env,
+                original_direction=facing_direction,
+                character_description=None
+            )
+
+        else:
+            # --- VIDEO-ONLY REGENERATION (Stage 2 only) ---
+            # 1. Download existing helmet image from R2
+            idx_h = helmet_image_path.find("images/")
+            if idx_h == -1:
+                raise ValueError("Invalid helmet image path structure")
+            helmet_key = helmet_image_path[idx_h:]
+            try:
+                helmet_image_bytes = await storage.download_bytes(helmet_key)
+                helmet_mime_type = "image/jpeg" if helmet_key.lower().endswith((".jpg", ".jpeg")) else "image/png"
+            except Exception as e:
+                logger.warning(f"Regenerate: failed to read helmet image {helmet_key}, falling back to full: {e}")
+                # Fallback to full generation if R2 file missing
+                return await admin_regenerate_artwork(artwork_id, RegenerateRequest(type="full"), request, repo, provider)
+
+            # 2. Clean up old video file from R2
+            old_video_url = artwork.get("video_url")
+            if old_video_url:
+                idx_v = old_video_url.find("videos/")
+                if idx_v != -1:
+                    try:
+                        await storage.delete(old_video_url[idx_v:])
+                    except Exception:
+                        pass
+
+            # 3. Submit helmet image directly to Veo
+            char_desc = "a simple black stick figure"
+            custom_prompt = (
+                f"{char_desc} wearing its glass space helmet, "
+                "glowing neon outline style, "
+                "walking forward naturally on a solid green background"
+            )
+            project_id = provider.settings.gcp_project_id
+            provider_task_id = await provider._submit_to_veo(
+                custom_prompt=custom_prompt,
+                image_bytes=helmet_image_bytes,
+                image_mime_type=helmet_mime_type,
+                project_id=project_id,
+                aspect_ratio=aspect_ratio,
+                file_id=artwork_id,
+                env=env
+            )
+
+        # 3. Update database status to generating and clear video_url
+        await repo.update_to_generating(artwork_id, provider_task_id, facing_direction, helmet_image_path)
+        await repo.db.prepare("UPDATE artworks SET video_url = NULL WHERE id = ?").bind(artwork_id).run()
+
+        return {
+            "status": "generating",
+            "task_id": artwork_id,
+            "provider_task_id": provider_task_id,
+            "type": regen_type
+        }
+
+    except Exception as e:
+        logger.error(f"Regenerate failed for artwork {artwork_id}: {e}")
+        await repo.update_to_failed(artwork_id)
+        raise HTTPException(status_code=502, detail=f"Regeneration failed: {e}")
 
 
 @app.post("/api/admin/artworks/{artwork_id}/delete")

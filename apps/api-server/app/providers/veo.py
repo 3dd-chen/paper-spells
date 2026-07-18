@@ -237,9 +237,12 @@ class GeminiVeoProvider(AIProvider):
         helmet_image_bytes, helmet_mime_type = await self._generate_helmet_image(image_bytes, char_desc, aspect_ratio, env)
 
         # 3. Upload the edited helmet image as a temporary Veo reference (images/{file_id}_helmet.png/jpg)
+        ext = "jpg" if "jpeg" in helmet_mime_type.lower() else "png"
+        r2_public_url = self.settings.r2_public_url.rstrip("/")
+        helmet_path = f"{r2_public_url}/images/{file_id}_helmet.{ext}"
+
         if self.storage:
             try:
-                ext = "jpg" if "jpeg" in helmet_mime_type.lower() else "png"
                 await self.storage.upload_bytes(f"images/{file_id}_helmet.{ext}", helmet_image_bytes)
             except Exception as e:
                 logger.error(f"Failed to upload helmet image to storage: {e}")
@@ -254,7 +257,7 @@ class GeminiVeoProvider(AIProvider):
         # 5. Submit the edited image to Veo for animation
         operation_name = await self._submit_to_veo(custom_prompt, helmet_image_bytes, helmet_mime_type, project_id, aspect_ratio, file_id, env)
 
-        return operation_name, original_direction
+        return operation_name, original_direction, helmet_path
 
     async def _submit_to_veo(self, custom_prompt: str, image_bytes: bytes, image_mime_type: str, project_id: str, aspect_ratio: str, file_id: str, env: Any) -> str:
         """Submit to Veo with a concise, focused prompt."""

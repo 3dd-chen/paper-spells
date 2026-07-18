@@ -81,6 +81,15 @@ export async function deleteArtwork(id: string): Promise<void> {
   if (!res.ok) throw new Error('Delete failed');
 }
 
+export async function regenerateArtwork(id: string, type: 'full' | 'video'): Promise<{ status: string; task_id: string; type: string }> {
+  const res = await adminFetch(`/api/admin/artworks/${id}/regenerate`, {
+    method: 'POST',
+    body: JSON.stringify({ type }),
+  });
+  if (!res.ok) throw new Error('Regeneration failed');
+  return res.json();
+}
+
 export async function pollRoomArtworks(roomId: string): Promise<any> {
   const res = await adminFetch(`/api/poll?room_id=${encodeURIComponent(roomId)}`, { method: 'POST' });
   if (!res.ok) throw new Error('Poll failed');
@@ -94,6 +103,7 @@ export interface AdminArtwork {
   hidden: number;
   video_url?: string;
   image_path?: string;
+  helmet_image_path?: string;
   facing_direction?: string;
   created_at?: string;
 }

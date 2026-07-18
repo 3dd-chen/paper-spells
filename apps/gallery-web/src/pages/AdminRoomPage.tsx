@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getRoomArtworks, hideArtwork, unhideArtwork, deleteArtwork, pollRoomArtworks, type AdminArtwork } from '../lib/adminApi';
+import { getRoomArtworks, hideArtwork, unhideArtwork, deleteArtwork, pollRoomArtworks, regenerateArtwork, type AdminArtwork } from '../lib/adminApi';
 import { resolveVideoUrl } from '../lib/videoUrl';
 import { ChromaVideo } from '../components/ChromaVideo';
 
@@ -128,6 +128,40 @@ export function AdminRoomPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
+
+  // States for Carousel slides and Lightbox Preview Zoom
+  const [activeSlides, setActiveSlides] = useState<Record<string, number>>({});
+  const [lightboxItem, setLightboxItem] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
+
+  const handleRegenerate = async (artworkId: string, type: 'full' | 'video') => {
+    setPendingId(artworkId);
+    try {
+      // 1. Reset carousel slide for this card to 0 (Original image)
+      setActiveSlides(prev => ({ ...prev, [artworkId]: 0 }));
+
+      // 2. Call backend endpoint to trigger regeneration
+      await regenerateArtwork(artworkId, type);
+
+      // 3. Update status locally so the polling logic picks it up
+      setArtworks(prev =>
+        prev.map(a =>
+          a.id === artworkId
+            ? {
+                ...a,
+                status: 'generating',
+                video_url: undefined,
+                helmet_image_path: type === 'full' ? undefined : a.helmet_image_path,
+              }
+            : a
+        )
+      );
+    } catch (err) {
+      console.error('Regeneration failed:', err);
+      alert('Regeneration failed. Please try again.');
+    } finally {
+      setPendingId(null);
+    }
+  };
 
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 12;
@@ -281,57 +315,209 @@ export function AdminRoomPage() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {paginatedArtworks.map(artwork => {
-                const videoSrc = artwork.video_url ? resolveVideoUrl(artwork.video_url) : null;
-                const imgSrc = artwork.image_path ? resolveVideoUrl(artwork.image_path) : null;
+                // Dynamically build slides for the carousel based on availability of raw image, edited image, and video.
+                const slides: { type: 'original' | 'helmet' | 'video' | 'loading'; url?: string; label: string }[] = [];
+
+                if (artwork.image_path) {
+                  slides.push({
+                    type: 'original',
+                    url: resolveVideoUrl(artwork.image_path),
+                    label: 'Original'
+                  });
+                }
+
+                if (artwork.helmet_image_path) {
+                  slides.push({
+                    type: 'helmet',
+                    url: resolveVideoUrl(artwork.helmet_image_path),
+                    label: 'Space Helmet'
+                  });
+                } else if (artwork.status === 'generating' || artwork.status === 'pending') {
+                  slides.push({
+                    type: 'loading',
+                    label: 'Suit Generating...'
+                  });
+                }
+
+                if (artwork.video_url) {
+                  slides.push({
+                    type: 'video',
+                    url: resolveVideoUrl(artwork.video_url),
+                    label: 'Video Animation'
+                  });
+                } else if (artwork.status === 'generating') {
+                  slides.push({
+                    type: 'loading',
+                    label: 'Video Generating...'
+                  });
+                }
+
+                const rawIndex = activeSlides[artwork.id] ?? 0;
+                const activeIndex = rawIndex >= slides.length ? 0 : rawIndex;
+                const currentSlide = slides[activeIndex];
 
                 return (
                   <div
                     key={artwork.id}
-                    className={`cosmic-card border border-white/10 overflow-hidden transition-all ${artwork.hidden ? 'opacity-40' : ''}`}
+                    className={`cosmic-card border border-white/10 overflow-hidden transition-all flex flex-col justify-between ${artwork.hidden ? 'opacity-40' : ''}`}
                   >
-                    {/* Media Preview — cosmic space background to match frontend */}
+                    {/* Media Preview Slide Container */}
                     <div
-                      className="aspect-video relative overflow-hidden flex items-center justify-center border-b border-white/10 cosmic-bg"
+                      className="aspect-video relative overflow-hidden flex items-center justify-center border-b border-white/10 cosmic-bg group"
                     >
-                      {videoSrc ? (
-                        <ChromaVideo src={videoSrc} />
-                      ) : imgSrc ? (
-                        <ChromaImage src={imgSrc} />
+                      {currentSlide?.type === 'video' && currentSlide.url ? (
+                        <ChromaVideo src={currentSlide.url} />
+                      ) : (currentSlide?.type === 'helmet' || currentSlide?.type === 'original') && currentSlide.url ? (
+                        <ChromaImage src={currentSlide.url} />
                       ) : (
                         <div className="flex flex-col items-center gap-1.5 text-white/60">
                           <StatusGlyph status={artwork.status} />
-                          <span className="font-label text-xs capitalize">{artwork.status}</span>
+                          <span className="font-label text-xs capitalize text-center px-2">
+                            {currentSlide?.label || artwork.status}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Zoom Overlay (visible on hover) */}
+                      {currentSlide?.url && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLightboxItem({
+                              type: currentSlide.type === 'video' ? 'video' : 'image',
+                              url: currentSlide.url!
+                            });
+                          }}
+                          className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-zoom-in"
+                          title="Zoom Preview"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                          </svg>
+                        </button>
+                      )}
+
+                      {/* Slide Index Badge */}
+                      {currentSlide && (
+                        <div className="absolute top-2 left-2 bg-black/55 text-white/80 px-2 py-0.5 text-[0.6rem] rounded font-label uppercase tracking-wider select-none">
+                          {currentSlide.label}
+                        </div>
+                      )}
+
+                      {/* Carousel Arrow Navigation Controls */}
+                      {slides.length > 1 && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveSlides(prev => ({
+                                ...prev,
+                                [artwork.id]: (activeIndex - 1 + slides.length) % slides.length
+                              }));
+                            }}
+                            className="absolute left-1.5 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/75 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-pointer"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="m15 18-6-6 6-6"/>
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveSlides(prev => ({
+                                ...prev,
+                                [artwork.id]: (activeIndex + 1) % slides.length
+                              }));
+                            }}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/75 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-pointer"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="m9 18 6-6-6-6"/>
+                            </svg>
+                          </button>
+                        </>
+                      )}
+
+                      {/* Carousel Indicator Dots */}
+                      {slides.length > 1 && (
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 px-2 py-0.5 rounded-full z-10">
+                          {slides.map((s, idx) => (
+                            <button
+                              key={idx}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveSlides(prev => ({ ...prev, [artwork.id]: idx }));
+                              }}
+                              className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${idx === activeIndex ? 'bg-sun scale-110' : 'bg-white/40'}`}
+                              title={s.label}
+                            />
+                          ))}
                         </div>
                       )}
                     </div>
 
-                    {/* Info */}
-                    <div className="p-3 space-y-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`font-label text-[0.65rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/10 ${STATUS_COLORS[artwork.status] ?? 'bg-white/10 text-white/60'}`}>
-                          {artwork.status}
-                        </span>
-                        {artwork.hidden
-                          ? <span className="font-label text-[0.65rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-white/40">hidden</span>
-                          : null}
+                    {/* Content Details & Actions */}
+                    <div className="p-3 space-y-3 flex-1 flex flex-col justify-between">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`font-label text-[0.65rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/10 ${STATUS_COLORS[artwork.status] ?? 'bg-white/10 text-white/60'}`}>
+                            {artwork.status}
+                          </span>
+                          {artwork.hidden ? (
+                            <span className="font-label text-[0.65rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-white/40">
+                              hidden
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="font-label text-[0.7rem] text-white/50">{artwork.created_at?.slice(0, 10)}</p>
                       </div>
-                      <p className="font-label text-xs text-white/50 truncate">{artwork.created_at?.slice(0, 10)}</p>
 
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => handleToggleHide(artwork)}
-                          disabled={pendingId === artwork.id}
-                          className="font-label font-bold flex-1 text-xs py-1.5 rounded-lg border border-white/20 text-white hover:bg-white hover:text-black transition-colors disabled:opacity-40"
-                        >
-                          {artwork.hidden ? 'Show' : 'Hide'}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(artwork)}
-                          disabled={pendingId === artwork.id}
-                          className="font-label font-bold flex-1 text-xs py-1.5 rounded-lg border border-vermilion text-vermilion hover:bg-vermilion hover:text-white transition-colors disabled:opacity-40"
-                        >
-                          Delete
-                        </button>
+                      {/* regeneration action button dependent on active slide */}
+                      <div className="space-y-2 pt-1 border-t border-white/5">
+                        {currentSlide?.type === 'helmet' && (
+                          <button
+                            onClick={() => handleRegenerate(artwork.id, 'full')}
+                            disabled={pendingId === artwork.id || artwork.status === 'generating'}
+                            className="w-full font-label font-bold text-[0.68rem] py-1.5 px-2 rounded-lg border border-sun/40 text-sun hover:bg-sun hover:text-ink transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                            title="Re-generate the space helmet suit design and animations from the original sketch."
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={pendingId === artwork.id ? 'animate-spin' : ''}>
+                              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>
+                            </svg>
+                            <span>Redo Helmet & Video</span>
+                          </button>
+                        )}
+
+                        {currentSlide?.type === 'video' && (
+                          <button
+                            onClick={() => handleRegenerate(artwork.id, 'video')}
+                            disabled={pendingId === artwork.id || artwork.status === 'generating'}
+                            className="w-full font-label font-bold text-[0.68rem] py-1.5 px-2 rounded-lg border border-sun/40 text-sun hover:bg-sun hover:text-ink transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                            title="Keep the space helmet design, but run the Veo animation process again."
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={pendingId === artwork.id ? 'animate-spin' : ''}>
+                              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>
+                            </svg>
+                            <span>Redo Video Only</span>
+                          </button>
+                        )}
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleToggleHide(artwork)}
+                            disabled={pendingId === artwork.id}
+                            className="font-label font-bold flex-1 text-xs py-1.5 rounded-lg border border-white/20 text-white hover:bg-white hover:text-black transition-colors disabled:opacity-40 cursor-pointer"
+                          >
+                            {artwork.hidden ? 'Show' : 'Hide'}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(artwork)}
+                            disabled={pendingId === artwork.id}
+                            className="font-label font-bold flex-1 text-xs py-1.5 rounded-lg border border-vermilion text-vermilion hover:bg-vermilion hover:text-white transition-colors disabled:opacity-40 cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -364,6 +550,37 @@ export function AdminRoomPage() {
           </>
         )}
       </div>
+
+      {/* Lightbox Zoom Preview Modal Overlay */}
+      {lightboxItem && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-zoom-out select-none"
+          onClick={() => setLightboxItem(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2.5 rounded-full font-bold text-lg cursor-pointer transition-colors z-50"
+            onClick={() => setLightboxItem(null)}
+          >
+            ✕
+          </button>
+          {lightboxItem.type === 'video' ? (
+            <video
+              src={lightboxItem.url}
+              controls
+              autoPlay
+              loop
+              className="max-w-full max-h-[90vh] object-contain rounded-lg border-2 border-white/15 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img
+              src={lightboxItem.url}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg border-2 border-white/15 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

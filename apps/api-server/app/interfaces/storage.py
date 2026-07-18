@@ -9,6 +9,10 @@ class StorageInterface(ABC):
         pass
 
     @abstractmethod
+    async def download_bytes(self, path: str) -> bytes:
+        pass
+
+    @abstractmethod
     async def delete(self, path: str) -> None:
         pass
 
@@ -43,6 +47,19 @@ class CloudflareR2Storage(StorageInterface):
             logger.info(f"Uploaded {path} to R2 (type={content_type})")
         except Exception as e:
             logger.error(f"R2 Upload failed for {path}: {e}")
+            raise
+
+    async def download_bytes(self, path: str) -> bytes:
+        import js
+        try:
+            obj = await self.bucket.get(path)
+            if not obj:
+                raise FileNotFoundError(f"File not found in R2: {path}")
+            array_buffer = await obj.arrayBuffer()
+            uint8_array = js.Uint8Array.new(array_buffer)
+            return bytes(uint8_array.to_py())
+        except Exception as e:
+            logger.error(f"R2 Download failed for {path}: {e}")
             raise
 
     async def delete(self, path: str) -> None:

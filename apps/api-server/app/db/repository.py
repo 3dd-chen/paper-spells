@@ -34,15 +34,27 @@ class ArtworkRepository:
         items = result.results.to_py()
         return items[0] if items else None
 
-    async def update_to_generating(self, task_id: str, provider_task_id: str, facing_direction: Optional[str] = None) -> bool:
-        if facing_direction:
-            await self.db.prepare(
-                "UPDATE artworks SET status = ?, provider_task_id = ?, facing_direction = ? WHERE id = ?"
-            ).bind(ArtworkStatus.GENERATING.value, provider_task_id, facing_direction, task_id).run()
-        else:
-            await self.db.prepare(
-                "UPDATE artworks SET status = ?, provider_task_id = ? WHERE id = ?"
-            ).bind(ArtworkStatus.GENERATING.value, provider_task_id, task_id).run()
+    async def update_to_generating(
+        self,
+        task_id: str,
+        provider_task_id: str,
+        facing_direction: Optional[str] = None,
+        helmet_image_path: Optional[str] = None
+    ) -> bool:
+        query = "UPDATE artworks SET status = ?, provider_task_id = ?"
+        params = [ArtworkStatus.GENERATING.value, provider_task_id]
+
+        if facing_direction is not None:
+            query += ", facing_direction = ?"
+            params.append(facing_direction)
+        if helmet_image_path is not None:
+            query += ", helmet_image_path = ?"
+            params.append(helmet_image_path)
+
+        query += " WHERE id = ?"
+        params.append(task_id)
+
+        await self.db.prepare(query).bind(*params).run()
         return True
 
     async def update_to_completed(self, task_id: str, video_url: str, facing_direction: Optional[str] = None) -> bool:

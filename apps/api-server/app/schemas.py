@@ -53,6 +53,7 @@ class AdminArtworkItem(BaseModel):
     hidden: int = 0
     video_url: Optional[str] = None
     image_path: Optional[str] = None
+    helmet_image_path: Optional[str] = None
     facing_direction: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -60,3 +61,7 @@ class AdminArtworkItem(BaseModel):
 class AdminRoomItem(BaseModel):
     room_id: str
     count: int
+
+
+class RegenerateRequest(BaseModel):
+    type: str  # "full" or "video"
