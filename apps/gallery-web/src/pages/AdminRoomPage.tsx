@@ -193,12 +193,6 @@ export function AdminRoomPage() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    try {
-      // Cleanly trigger status checks on reload
-      await pollRoomArtworks(roomId);
-    } catch (err) {
-      console.error('Manual status check failed:', err);
-    }
     await fetchArtworks();
     setRefreshing(false);
   };
