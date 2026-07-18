@@ -306,9 +306,16 @@ async def poll_generating(
     provider: AIProvider = Depends(get_provider),
 ):
     """Check Veo status for generating artworks and update DB.
-    Call this less frequently (e.g. every 10-15s) rather than on every gallery refresh.
+    1. First batch-cleanup any stuck task older than 15 minutes.
+    2. Limits subrequests by checking at most 5 generating tasks per poll.
     """
-    generating = await repo.get_all_generating(room_id)
+    # Auto-fail stuck tasks older than 15 minutes in one query
+    cleaned_count = await repo.cleanup_stuck_artworks(room_id, timeout_minutes=15)
+    if cleaned_count > 0:
+        logger.info(f"Cleaned up {cleaned_count} stuck generating tasks to failed status.")
+
+    # Limit to checking 5 tasks to respect Worker subrequest bounds (max 10 on Free)
+    generating = await repo.get_all_generating(room_id, limit=5)
     env = request.scope.get("env", None)
     updated = []
 
@@ -329,7 +336,11 @@ async def poll_generating(
             logger.error(f"poll: error checking status for {artwork['id']}: {e}")
             updated.append({"id": artwork["id"], "status": "error", "error": str(e)})
 
-    return {"checked": len(updated), "results": updated}
+    return {
+        "checked": len(updated),
+        "results": updated,
+        "auto_failed_stuck": cleaned_count
+    }
 
 
 @app.get("/api/health")
@@ -407,8 +418,13 @@ async def admin_get_room(
     provider: AIProvider = Depends(get_provider),
     _=Depends(require_admin),
 ):
-    # Check and update any generating artworks in this room
-    generating = await repo.get_all_generating(room_id)
+    # Auto-fail stuck tasks older than 15 minutes in one query
+    cleaned_count = await repo.cleanup_stuck_artworks(room_id, timeout_minutes=15)
+    if cleaned_count > 0:
+        logger.info(f"Admin: cleaned up {cleaned_count} stuck generating tasks to failed status.")
+
+    # Check and update any generating artworks in this room (limit 5 to prevent Worker Subrequest crashes)
+    generating = await repo.get_all_generating(room_id, limit=5)
     env = request.scope.get("env", None)
 
     for artwork in generating:

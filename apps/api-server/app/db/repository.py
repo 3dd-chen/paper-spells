@@ -62,10 +62,25 @@ class ArtworkRepository:
         ).bind(ArtworkStatus.FAILED.value, task_id).run()
         return True
 
-    async def get_all_generating(self, room_id: str) -> List[dict]:
+    async def cleanup_stuck_artworks(self, room_id: str, timeout_minutes: int = 15) -> int:
+        """Mark generating artworks older than timeout_minutes as failed in a single batch query."""
         result = await self.db.prepare(
-            "SELECT * FROM artworks WHERE status = ? AND room_id = ?"
-        ).bind(ArtworkStatus.GENERATING.value, room_id).all()
+            "UPDATE artworks SET status = ? "
+            "WHERE status = ? AND room_id = ? "
+            "AND datetime(created_at) < datetime('now', '-' || ? || ' minutes')"
+        ).bind(ArtworkStatus.FAILED.value, ArtworkStatus.GENERATING.value, room_id, str(timeout_minutes)).run()
+        return result.meta.changes if hasattr(result, "meta") and hasattr(result.meta, "changes") else 0
+
+    async def get_all_generating(self, room_id: str, limit: Optional[int] = None) -> List[dict]:
+        """Get currently generating artworks. Limits subrequests by ordering by created_at."""
+        if limit is not None:
+            result = await self.db.prepare(
+                "SELECT * FROM artworks WHERE status = ? AND room_id = ? ORDER BY created_at ASC LIMIT ?"
+            ).bind(ArtworkStatus.GENERATING.value, room_id, limit).all()
+        else:
+            result = await self.db.prepare(
+                "SELECT * FROM artworks WHERE status = ? AND room_id = ? ORDER BY created_at ASC"
+            ).bind(ArtworkStatus.GENERATING.value, room_id).all()
         return result.results.to_py()
 
     async def get_all_completed(self, room_id: str) -> List[dict]:
