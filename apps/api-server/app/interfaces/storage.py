@@ -29,11 +29,11 @@ class CloudflareR2Storage(StorageInterface):
             elif path.lower().endswith((".jpeg", ".jpg")):
                 content_type = "image/jpeg"
 
-            # Set R2 options including public caching headers (1 year cache)
+            # Set R2 options including public caching headers (30 days cache)
             py_options = {
                 "httpMetadata": {
                     "contentType": content_type,
-                    "cacheControl": "public, max-age=31536000"
+                    "cacheControl": "public, max-age=2592000"
                 }
             }
             js_options = to_js(py_options, dict_converter=js.Object.fromEntries)
