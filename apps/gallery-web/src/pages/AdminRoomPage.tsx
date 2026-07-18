@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getRoomArtworks, hideArtwork, unhideArtwork, deleteArtwork, type AdminArtwork } from '../lib/adminApi';
+import { getRoomArtworks, hideArtwork, unhideArtwork, deleteArtwork, pollRoomArtworks, type AdminArtwork } from '../lib/adminApi';
 import { resolveVideoUrl } from '../lib/videoUrl';
 import { ChromaVideo } from '../components/ChromaVideo';
 
@@ -166,6 +166,25 @@ export function AdminRoomPage() {
     }
   }, [roomId, navigate]);
 
+  // Background polling: If there are any pending/generating artworks,
+  // trigger status checks in the background every 10 seconds.
+  useEffect(() => {
+    if (!roomId) return;
+    const hasGenerating = artworks.some(a => a.status === 'generating' || a.status === 'pending');
+    if (!hasGenerating) return;
+
+    const interval = setInterval(async () => {
+      try {
+        await pollRoomArtworks(roomId);
+        await fetchArtworks();
+      } catch (err) {
+        console.error('Background admin poll failed:', err);
+      }
+    }, 10000); // 10s interval
+
+    return () => clearInterval(interval);
+  }, [roomId, artworks, fetchArtworks]);
+
   useEffect(() => {
     setCurrentPage(1);
     setLoading(true);
@@ -174,6 +193,12 @@ export function AdminRoomPage() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    try {
+      // Cleanly trigger status checks on reload
+      await pollRoomArtworks(roomId);
+    } catch (err) {
+      console.error('Manual status check failed:', err);
+    }
     await fetchArtworks();
     setRefreshing(false);
   };

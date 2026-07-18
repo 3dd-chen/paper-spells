@@ -413,32 +413,10 @@ async def admin_list_rooms(
 @app.get("/api/admin/rooms/{room_id}", response_model=list[AdminArtworkItem])
 async def admin_get_room(
     room_id: str,
-    request: Request,
     repo: ArtworkRepository = Depends(get_repo),
-    provider: AIProvider = Depends(get_provider),
     _=Depends(require_admin),
 ):
-    # Auto-fail stuck tasks older than 15 minutes in one query
-    cleaned_count = await repo.cleanup_stuck_artworks(room_id, timeout_minutes=15)
-    if cleaned_count > 0:
-        logger.info(f"Admin: cleaned up {cleaned_count} stuck generating tasks to failed status.")
-
-    # Check and update any generating artworks in this room (limit 5 to prevent Worker Subrequest crashes)
-    generating = await repo.get_all_generating(room_id, limit=5)
-    env = request.scope.get("env", None)
-
-    for artwork in generating:
-        if not artwork["provider_task_id"]:
-            continue
-        try:
-            result = await provider.check_status(artwork["provider_task_id"], env=env)
-            if result.status == ProviderStatus.COMPLETED and result.video_url:
-                await repo.update_to_completed(artwork["id"], result.video_url, result.facing_direction)
-            elif result.status == ProviderStatus.FAILED:
-                await repo.update_to_failed(artwork["id"])
-        except Exception as e:
-            logger.error(f"Error checking status in admin for {artwork['id']}: {e}")
-
+    """Return all artworks in a room. Fast DB-only read — no status checking loops."""
     artworks = await repo.get_artworks_by_room(room_id)
     def to_item(a: dict) -> AdminArtworkItem:
         # D1 NULL values may not come back as Python None in Pydantic v1 — coerce explicitly

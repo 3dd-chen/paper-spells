@@ -81,6 +81,12 @@ export async function deleteArtwork(id: string): Promise<void> {
   if (!res.ok) throw new Error('Delete failed');
 }
 
+export async function pollRoomArtworks(roomId: string): Promise<any> {
+  const res = await adminFetch(`/api/poll?room_id=${encodeURIComponent(roomId)}`, { method: 'POST' });
+  if (!res.ok) throw new Error('Poll failed');
+  return res.json();
+}
+
 export interface AdminArtwork {
   id: string;
   room_id: string;
