@@ -563,22 +563,16 @@ export function AdminRoomPage() {
           >
             ✕
           </button>
-          {lightboxItem.type === 'video' ? (
-            <video
-              src={lightboxItem.url}
-              controls
-              autoPlay
-              loop
-              className="max-w-full max-h-[90vh] object-contain rounded-lg border-2 border-white/15 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <img
-              src={lightboxItem.url}
-              className="max-w-full max-h-[90vh] object-contain rounded-lg border-2 border-white/15 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-          )}
+          <div
+            className="relative w-[90vw] max-w-[960px] aspect-video rounded-xl overflow-hidden border-2 border-white/20 cosmic-bg shadow-2xl flex items-center justify-center cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lightboxItem.type === 'video' ? (
+              <ChromaVideo src={lightboxItem.url} />
+            ) : (
+              <ChromaImage src={lightboxItem.url} />
+            )}
+          </div>
         </div>
       )}
     </div>
