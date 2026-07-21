@@ -22,6 +22,12 @@ const FRAGMENT_SHADER_SOURCE = `
   varying vec2 vTexCoord;
   uniform sampler2D uVideoTexture;
   void main() {
+    // 0. Edge trimming: trim outer 0.8% border to eliminate video encoding seam lines
+    if (vTexCoord.x < 0.008 || vTexCoord.x > 0.992 || vTexCoord.y < 0.008 || vTexCoord.y > 0.992) {
+      gl_FragColor = vec4(0.0);
+      return;
+    }
+
     vec4 color = texture2D(uVideoTexture, vTexCoord);
     float r = color.r;
     float g = color.g;

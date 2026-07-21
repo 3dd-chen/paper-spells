@@ -27,7 +27,19 @@ function ChromaImage({ src }: { src: string }) {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imageData.data;
+      const w = canvas.width;
+      const h = canvas.height;
       for (let i = 0; i < d.length; i += 4) {
+        const pixelIndex = i / 4;
+        const x = pixelIndex % w;
+        const y = Math.floor(pixelIndex / w);
+
+        // 0. Edge trimming: trim 2px outer border to eliminate compression seam lines
+        if (x < 2 || x >= w - 2 || y < 2 || y >= h - 2) {
+          d[i + 3] = 0;
+          continue;
+        }
+
         const r = d[i], g = d[i + 1], b = d[i + 2];
         // 1. Green removal
         if (g > 100 && g > r * 1.4 && g > b * 1.4) {
