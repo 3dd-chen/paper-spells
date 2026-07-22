@@ -26,7 +26,15 @@ class AIProvider(ABC):
     """Abstract base class for AI video generation providers."""
 
     @abstractmethod
-    async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None, original_direction: str | None = None) -> tuple[str, str | None]:
+    async def submit(
+        self,
+        image_bytes: bytes,
+        file_id: str,
+        aspect_ratio: str = "16:9",
+        env: Any = None,
+        original_direction: str | None = None,
+        character_description: str | None = None
+    ) -> tuple[str, str | None, str | None]:
         """
         Submits an image for video generation.
         Returns a tuple: (task_id, original_direction)

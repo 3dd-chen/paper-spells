@@ -56,6 +56,7 @@ class MockD1Database:
         CREATE TABLE artworks (
             id TEXT PRIMARY KEY,
             image_path TEXT,
+            helmet_image_path TEXT,
             video_url TEXT,
             status TEXT DEFAULT 'pending',
             provider_task_id TEXT,
@@ -80,7 +81,7 @@ async def override_get_repo():
 
 class CustomTestProvider(AIProvider):
     async def submit(self, image_bytes, file_id, aspect_ratio="16:9", env=None, original_direction=None, character_description=None):
-        return "custom-test-task", original_direction
+        return "custom-test-task", original_direction, "https://test.video_helmet.png"
     
     async def check_status(self, provider_task_id, env=None):
         return ProviderResult(status=ProviderStatus.COMPLETED, video_url="https://test.video", facing_direction="left")
@@ -116,7 +117,10 @@ def test_upload_artwork_with_di_override():
             data = response.json()
             assert "task_id" in data
             assert data["status"] == "generating"
-            
+            # Call poll endpoint to trigger task status transition from generating to completed
+            poll_response = client.post("/api/poll?room_id=default")
+            assert poll_response.status_code == 200
+
             # Since CustomTestProvider returns "completed" instantly, we can check gallery
             gallery_res = client.get("/api/gallery")
             assert gallery_res.status_code == 200

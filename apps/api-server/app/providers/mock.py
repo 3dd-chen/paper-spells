@@ -9,10 +9,19 @@ from app.providers.base import AIProvider, ProviderResult, ProviderStatus
 
 
 class MockProvider(AIProvider):
-    async def submit(self, image_bytes: bytes, file_id: str, aspect_ratio: str = "16:9", env: Any = None, original_direction: str | None = None) -> tuple[str, str | None]:
+    async def submit(
+        self,
+        image_bytes: bytes,
+        file_id: str,
+        aspect_ratio: str = "16:9",
+        env: Any = None,
+        original_direction: str | None = None,
+        character_description: str | None = None
+    ) -> tuple[str, str | None, str | None]:
         task_id = f"mock-{file_id}"
         print(f"[MOCK] Submitted task {task_id}")
-        return task_id, original_direction
+        mock_helmet_url = f"https://mock-storage.com/images/{file_id}_helmet.png"
+        return task_id, original_direction, mock_helmet_url
 
     async def check_status(self, provider_task_id: str, env: Any = None) -> ProviderResult:
         return ProviderResult(

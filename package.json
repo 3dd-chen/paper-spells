@@ -6,6 +6,7 @@
   "scripts": {
     "dev:upload": "pnpm --filter upload-web dev",
     "dev:gallery": "pnpm --filter gallery-web dev",
+    "dev:api": "wrangler --cwd apps/api-server dev",
     "dev:all": "pnpm run --parallel /dev:.*/"
   }
 }
