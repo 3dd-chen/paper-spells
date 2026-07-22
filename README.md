@@ -69,7 +69,13 @@ To maintain a jank-free 60fps UI during upload, the image upload pipeline utiliz
 paper-spells/
 ├── apps/
 │   ├── api-server/        # Python FastAPI ASGI worker (Cloudflare Workers / D1 / R2)
-│   │   ├── app/           # Core API logic, DB Repository, and Vertex AI providers
+│   │   ├── app/           # Modular application packages
+│   │   │   ├── core/      # Settings dataclass & logging setup
+│   │   │   ├── middleware/# Request logging & dynamic CORS middlewares
+│   │   │   ├── routes/    # Public (/upload, /gallery, /poll) & Admin API routers
+│   │   │   ├── db/        # ArtworkRepository & AdminRepository (Cloudflare D1)
+│   │   │   ├── providers/ # Vertex AI Gemini & Veo video generation providers
+│   │   │   └── auth.py    # JWT authentication utilities
 │   │   ├── tests/         # Pytest suite running against Mock & Local Providers
 │   │   └── seed_admin.py  # Interactive CLI tool to generate PBKDF2 hashes for admins
 │   ├── gallery-web/       # React 18 / Vite Physics display wall (WebGL Chroma rendering)
