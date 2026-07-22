@@ -56,7 +56,7 @@ export default function App() {
 
         <div className="text-center space-y-2">
           <h1 className="starwars-text text-[2.1rem] leading-[1.0] font-black tracking-wider">
-            Flik flak
+            Paper Spells
           </h1>
           <p className="text-sm text-white/70">
             Upload your paper drawing and watch it come alive!

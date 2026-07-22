@@ -58,7 +58,7 @@ export function AdminLoginPage() {
           <h1 className="starwars-text text-[1.8rem] leading-[1.0] font-black tracking-wider">
             Admin Panel
           </h1>
-          <p className="font-label text-xs text-white/60 mt-2.5 tracking-wide">Flik flak Management</p>
+          <p className="font-label text-xs text-white/60 mt-2.5 tracking-wide">Paper Spells Management</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -9,7 +9,7 @@ export function Header({ spellCount, isLoaded, roomId }: HeaderProps) {
     <div className="ui-container absolute top-0 left-0 w-full p-6 pointer-events-none flex justify-between items-start gap-4">
       <div className="pointer-events-auto">
         <h1 className="starwars-text text-[2.2rem] leading-[1.0] font-black tracking-widest">
-          Flik flak
+          Paper Spells
         </h1>
         {roomId && (
           <div className="ps-chip tilt-r mt-2 inline-block bg-sun text-ink px-2.5 py-0.5 text-[0.62rem]">

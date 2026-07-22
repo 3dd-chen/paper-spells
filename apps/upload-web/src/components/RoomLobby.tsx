@@ -41,7 +41,7 @@ export function RoomLobby() {
       ))}
       <div className="max-w-md w-full cosmic-card p-8 space-y-7 text-center relative">
         <span className="ps-chip tilt-l absolute -top-3 -left-2 bg-sun text-ink text-[0.62rem] px-3 py-1">
-          Flik flak
+          Paper Spells
         </span>
         <h1 className="starwars-text text-[2.1rem] leading-[1.0] font-black tracking-wider">
           Enter Room
