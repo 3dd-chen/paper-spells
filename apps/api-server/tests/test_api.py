@@ -6,7 +6,8 @@ from fastapi.testclient import TestClient
 # Must mock dependencies before importing app
 os.environ["AI_PROVIDER"] = "mock"
 
-from main import app, get_provider, get_repo
+from main import app
+from app.dependencies import get_provider, get_repo
 from app.providers import AIProvider, MockProvider, ProviderResult, ProviderStatus
 from app.db.repository import ArtworkRepository
 
