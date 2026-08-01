@@ -12,6 +12,21 @@ Built with extreme performance and edge-first constraints in mind, it showcases 
 
 ---
 
+## 🌐 Live Demo
+
+Experience the full interactive Paper Spells pipeline live in your browser:
+
+* 🎨 **Gallery Display Wall (Live Canvas)**: [https://gallery.hissnake.com/?room=lobby](https://gallery.hissnake.com/?room=lobby)
+* ✏️ **Sketch & Upload Client (Mobile / Web)**: [https://upload.hissnake.com/?room=lobby](https://upload.hissnake.com/?room=lobby)
+
+### 💡 How to try the Demo:
+1. Open the **Gallery Display Wall** on your desktop browser.
+2. Open the **Upload Client** on your phone (or in a second tab) with the same room code (`room=lobby`).
+3. Draw a doodle on paper, take a photo, and upload it!
+4. Within seconds, Gemini analyzes your drawing, adds an astronaut suit, and Veo animates it walking live into the shared gallery!
+
+---
+
 ## 🏗️ System Architecture
 
 The following diagram illustrates the request lifecycle, decoupling computation on Cloudflare Workers from expensive generative models and client-side processing:
