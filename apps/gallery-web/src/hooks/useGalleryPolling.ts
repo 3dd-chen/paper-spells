@@ -2,8 +2,14 @@ import useSWR from 'swr';
 import type { GalleryItem } from '../types';
 
 const API_URL = import.meta.env.VITE_API_BASE_URL as string ?? '';
-const fetcher = (url: string) => fetch(url).then(r => r.json());
-const poster = (url: string) => fetch(url, { method: 'POST' }).then(r => r.json());
+// Throw on non-2xx so SWR keeps the last good data and exposes `error`,
+// instead of storing an error body like {"detail": ...} as `data`.
+async function parseOrThrow(r: Response) {
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+const fetcher = (url: string) => fetch(url).then(parseOrThrow);
+const poster = (url: string) => fetch(url, { method: 'POST' }).then(parseOrThrow);
 
 export function useGalleryPolling() {
   const roomId = new URLSearchParams(window.location.search).get('room') || 'default';
@@ -21,6 +27,6 @@ export function useGalleryPolling() {
     revalidateOnFocus: false,
   });
 
-  const videos = data?.filter(v => v.video_url) || [];
+  const videos = Array.isArray(data) ? data.filter(v => v.video_url) : [];
   return { videos, isLoaded: !!data || !!error, error };
 }

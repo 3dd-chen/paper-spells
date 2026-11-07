@@ -7,9 +7,18 @@ from app.db.repository import AdminRepository, ArtworkRepository
 from app.providers import AIProvider
 from app.core.config import Settings
 from app.auth import create_token
-from app.interfaces.http_client import JsFetchClient
+from app.interfaces.storage import CloudflareR2Storage
+from app.utils import get_png_ratio
 
 logger = logging.getLogger("paper_spells.routes.admin")
+
+
+def _r2_key(url, prefix: str):
+    """Extract the R2 object key (e.g. 'images/x.png') from a stored media URL."""
+    if not isinstance(url, str):
+        return None
+    idx = url.find(prefix)
+    return url[idx:] if idx != -1 else None
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -92,53 +101,91 @@ async def admin_regenerate_artwork(
         raise HTTPException(status_code=404, detail="Artwork not found")
 
     env = request.scope.get("env", None) if request else None
+    if not env or not hasattr(env, "BUCKET"):
+        raise HTTPException(status_code=500, detail="R2 storage binding not found")
+    storage = CloudflareR2Storage(env.BUCKET)
 
-    # Fetch original image bytes
-    original_image_url = artwork["image_path"]
+    # Read the original drawing straight from R2. Stored URLs may lack a scheme
+    # or use an older public domain, so locate the object key by its prefix.
+    original_key = _r2_key(artwork.get("image_path"), "images/")
+    if not original_key:
+        raise HTTPException(status_code=400, detail="Artwork has no valid image_path")
     try:
-        http_client = JsFetchClient()
-        image_bytes = await http_client.get_bytes(original_image_url)
+        original_bytes = await storage.download_bytes(original_key)
     except Exception as exc:
-        logger.error(f"Failed to fetch original image from {original_image_url}: {exc}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch original image: {exc}")
+        logger.error(f"Regenerate: failed to download original image {original_key}: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to read source image from storage: {exc}")
 
-    if req.type == "video" and artwork.get("helmet_image_path"):
-        # Video-only regeneration: Reuse existing helmet image
-        helmet_url = artwork["helmet_image_path"]
-        try:
-            helmet_bytes = await http_client.get_bytes(helmet_url)
-            # Submit to Veo directly with helmet image
-            veo_res = await provider.submit(
+    aspect_ratio = get_png_ratio(original_bytes)
+    facing_direction = artwork.get("facing_direction")
+    helmet_image_path = artwork.get("helmet_image_path")
+    old_video_key = _r2_key(artwork.get("video_url"), "videos/")
+
+    regen_type = req.type
+    helmet_key = _r2_key(helmet_image_path, "images/") if regen_type == "video" else None
+    helmet_bytes = None
+    if regen_type == "video":
+        if not hasattr(provider, "_submit_to_veo"):
+            regen_type = "full"  # e.g. MockProvider has no separate video stage
+        elif not helmet_key:
+            logger.info("Regenerate: no helmet image for video-only regen, falling back to full")
+            regen_type = "full"
+        else:
+            try:
+                helmet_bytes = await storage.download_bytes(helmet_key)
+            except Exception as exc:
+                logger.warning(f"Regenerate: failed to read helmet image {helmet_key}, falling back to full: {exc}")
+                regen_type = "full"
+
+    try:
+        if regen_type == "full":
+            # Stage 1 + 2: new helmet image, then a new video.
+            old_helmet_key = _r2_key(helmet_image_path, "images/")
+            for key in (old_helmet_key, old_video_key):
+                if key:
+                    await storage.delete(key)
+
+            provider_task_id, facing_direction, helmet_image_path = await provider.submit(
+                image_bytes=original_bytes,
+                file_id=artwork_id,
+                aspect_ratio=aspect_ratio,
+                env=env,
+                original_direction=facing_direction,
+            )
+        else:
+            # Stage 2 only: send the existing helmet image straight to Veo.
+            # provider.submit() would rerun the helmet step on top of the helmet.
+            if old_video_key:
+                await storage.delete(old_video_key)
+            helmet_mime = "image/jpeg" if helmet_key.lower().endswith((".jpg", ".jpeg")) else "image/png"
+            prompt = (
+                "a simple black stick figure wearing its glass space helmet, "
+                "glowing neon outline style, "
+                "walking forward naturally on a solid green background"
+            )
+            provider_task_id = await provider._submit_to_veo(
+                custom_prompt=prompt,
                 image_bytes=helmet_bytes,
+                image_mime_type=helmet_mime,
+                project_id=settings.gcp_project_id,
+                aspect_ratio=aspect_ratio,
                 file_id=artwork_id,
                 env=env,
-                original_direction=artwork.get("facing_direction")
             )
-            provider_task_id = veo_res[0]
-            facing_dir = veo_res[1]
-            await repo.update_to_generating(artwork_id, provider_task_id, facing_dir, helmet_url)
-            return {"task_id": artwork_id, "status": "generating", "type": "video"}
-        except Exception as exc:
-            logger.warning(f"Failed to reuse helmet image for video regen, falling back to full regen: {exc}")
 
-    # Full regeneration: Run full pipeline (helmet + video)
-    try:
-        provider_task_id, facing_direction, helmet_image_path = await provider.submit(
-            image_bytes=image_bytes,
-            file_id=artwork_id,
-            env=env,
-            original_direction=artwork.get("facing_direction")
+        await repo.update_to_generating(
+            artwork_id, provider_task_id, facing_direction, helmet_image_path, clear_video=True
         )
-        await repo.update_to_generating(artwork_id, provider_task_id, facing_direction, helmet_image_path)
     except Exception as exc:
-        logger.error(f"Regeneration provider error for artwork {artwork_id}: {exc}")
+        logger.error(f"Regenerate failed for artwork {artwork_id}: {exc}")
         await repo.update_to_failed(artwork_id)
-        raise HTTPException(status_code=502, detail=f"Regeneration provider error: {exc}")
+        raise HTTPException(status_code=502, detail=f"Regeneration failed: {exc}")
 
     return {
         "task_id": artwork_id,
         "status": "generating",
-        "type": "full"
+        "provider_task_id": provider_task_id,
+        "type": regen_type,
     }
 
 

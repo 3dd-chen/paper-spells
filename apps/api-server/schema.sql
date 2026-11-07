@@ -8,8 +8,14 @@ CREATE TABLE IF NOT EXISTS artworks (
     provider_task_id TEXT,
     facing_direction TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- When the current generation attempt started (reset on regenerate).
+    generating_started_at DATETIME
 );
+
+-- Existing databases need this before deploying code that writes it:
+--   ALTER TABLE artworks ADD COLUMN generating_started_at DATETIME;
+-- (see migrations/0001_add_generating_started_at.sql)
 
 -- Migration for databases created before `hidden` existed.
 -- SQLite has no "ADD COLUMN IF NOT EXISTS"; this is a no-op on a

@@ -57,10 +57,19 @@ class ArtworkRepository:
         task_id: str,
         provider_task_id: str,
         facing_direction: Optional[str] = None,
-        helmet_image_path: Optional[str] = None
+        helmet_image_path: Optional[str] = None,
+        clear_video: bool = False,
     ) -> bool:
-        query = "UPDATE artworks SET status = ?, provider_task_id = ?"
+        # generating_started_at drives the stuck-task timeout, so a regenerated
+        # artwork gets a fresh 15 minutes instead of being judged by created_at.
+        query = (
+            "UPDATE artworks SET status = ?, provider_task_id = ?, "
+            "generating_started_at = CURRENT_TIMESTAMP"
+        )
         params = [ArtworkStatus.GENERATING.value, provider_task_id]
+
+        if clear_video:
+            query += ", video_url = NULL"
 
         if facing_direction is not None:
             query += ", facing_direction = ?"
@@ -97,7 +106,7 @@ class ArtworkRepository:
         result = await self.db.prepare(
             "UPDATE artworks SET status = ? "
             "WHERE status = ? AND room_id = ? "
-            "AND datetime(created_at) < datetime('now', '-' || ? || ' minutes')"
+            "AND datetime(COALESCE(generating_started_at, created_at)) < datetime('now', '-' || ? || ' minutes')"
         ).bind(ArtworkStatus.FAILED.value, ArtworkStatus.GENERATING.value, room_id, str(timeout_minutes)).run()
         return result.meta.changes if hasattr(result, "meta") and hasattr(result.meta, "changes") else 0
 

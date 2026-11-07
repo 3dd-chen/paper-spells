@@ -74,7 +74,7 @@ export default function App() {
             />
             <button
               onClick={handleUpload}
-              disabled={!processedImage || isUploading}
+              disabled={!processedImage || isProcessing || isUploading}
               className="ps-btn ps-btn-blue w-full flex items-center justify-center gap-2 py-4 px-6 text-base"
             >
               {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
