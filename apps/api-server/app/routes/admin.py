@@ -23,7 +23,7 @@ async def admin_login(
     admin = await admin_repo.verify_credentials(req.username, req.password)
     if not admin:
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    token = create_token(admin["id"], admin["username"], settings.jwt_secret)
+    token = create_token(admin["id"], settings.jwt_secret)
     return {"token": token, "username": admin["username"]}
 
 

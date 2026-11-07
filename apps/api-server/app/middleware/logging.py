@@ -4,6 +4,31 @@ from starlette.types import ASGIApp, Scope, Receive, Send
 
 logger = logging.getLogger("paper_spells.middleware.logging")
 
+# Keys whose values must never reach the logs (credentials, JWTs, API keys).
+_SENSITIVE_KEYS = {
+    "password", "new_password", "old_password", "token", "access_token",
+    "refresh_token", "id_token", "authorization", "secret", "api_key",
+    "jwt", "private_key",
+}
+_REDACTED = "<redacted>"
+
+
+def _redact(value):
+    """Recursively replace sensitive values in parsed JSON before logging."""
+    if isinstance(value, dict):
+        return {
+            k: (_REDACTED if isinstance(k, str) and k.lower() in _SENSITIVE_KEYS else _redact(v))
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact(v) for v in value]
+    return value
+
+
+def _raw_looks_sensitive(text: str) -> bool:
+    lowered = text.lower()
+    return any(k in lowered for k in _SENSITIVE_KEYS)
+
 class LoggingASGIMiddleware:
     """ASGI Middleware to log requests and responses and block vulnerability scanners."""
     def __init__(self, app: ASGIApp) -> None:
@@ -81,18 +106,19 @@ class LoggingASGIMiddleware:
             try:
                 body_json = json.loads(request_body.decode("utf-8"))
                 if isinstance(body_json, dict):
-                    logged_body = body_json.copy()
+                    logged_body = _redact(body_json)
                     if "image_data" in logged_body:
                         img_len = len(str(logged_body["image_data"]))
                         logged_body["image_data"] = f"<Base64 Image: {img_len} chars>"
                     body_summary = f" body={json.dumps(logged_body)}"
                 else:
-                    body_summary = f" body={body_json}"
+                    body_summary = f" body={json.dumps(_redact(body_json))}"
             except Exception:
-                if len(request_body) > 1000:
+                raw = request_body.decode("utf-8", errors="ignore")
+                if len(request_body) > 1000 or _raw_looks_sensitive(raw):
                     body_summary = f" body=<{len(request_body)} bytes>"
                 else:
-                    body_summary = f" body={request_body.decode('utf-8', errors='ignore')}"
+                    body_summary = f" body={raw}"
 
         logger.info(f"--> {method} {path}{query_str}{body_summary}")
 
@@ -100,10 +126,11 @@ class LoggingASGIMiddleware:
         if response_body and ("application/json" in content_type[0] or "text/" in content_type[0]):
             try:
                 resp_json = json.loads(response_body.decode("utf-8"))
-                resp_summary = f" body={json.dumps(resp_json)}"
+                resp_summary = f" body={json.dumps(_redact(resp_json))}"
             except Exception:
-                if len(response_body) < 500:
-                    resp_summary = f" body={response_body.decode('utf-8', errors='ignore')}"
+                raw_resp = response_body.decode("utf-8", errors="ignore")
+                if len(response_body) < 500 and not _raw_looks_sensitive(raw_resp):
+                    resp_summary = f" body={raw_resp}"
                 else:
                     resp_summary = f" body=<{len(response_body)} bytes>"
         else:
