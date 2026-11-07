@@ -40,22 +40,12 @@ async def upload_artwork(
 
     env = request.scope.get("env", None)
     file_id = str(uuid.uuid4())
-    filename = f"{file_id}.png"
 
-    # Save original drawing
-    if env and hasattr(env, "BUCKET"):
-        try:
-            await env.BUCKET.put(
-                filename,
-                image_bytes,
-                httpMetadata={"contentType": "image/png", "cacheControl": "public, max-age=2592000"}
-            )
-            image_url = f"{settings.r2_public_url.rstrip('/')}/{filename}"
-        except Exception as exc:
-            logger.error(f"R2 storage error: {exc}")
-            raise HTTPException(status_code=500, detail=f"Failed to upload drawing to storage: {exc}")
-    else:
-        image_url = f"https://mock-storage.com/images/{filename}"
+    # The provider uploads the original drawing to R2 at images/{file_id}.png
+    # (via CloudflareR2Storage, which converts bytes to a JS Uint8Array).
+    # Do not call env.BUCKET.put with Python bytes here: Pyodide does not
+    # convert them and R2 rejects the call with a TypeError.
+    image_url = f"{settings.r2_public_url.rstrip('/')}/images/{file_id}.png"
 
     artwork = await repo.create_artwork(
         image_path=image_url,
@@ -65,7 +55,7 @@ async def upload_artwork(
     try:
         provider_task_id, facing_direction, helmet_image_path = await provider.submit(
             image_bytes=image_bytes,
-            file_id=artwork["id"],
+            file_id=file_id,
             aspect_ratio=req.aspect_ratio,
             env=env,
             original_direction=req.original_direction,
