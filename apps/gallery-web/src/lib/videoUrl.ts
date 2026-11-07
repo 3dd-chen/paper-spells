@@ -4,8 +4,10 @@
  */
 const MEDIA_BASE = import.meta.env.VITE_MEDIA_BASE_URL as string;
 
-export function resolveVideoUrl(raw: string): string {
-  if (!raw) return '';
+export function resolveVideoUrl(raw: unknown): string {
+  // The API can return non-string placeholders (e.g. {} for a SQL NULL);
+  // treat anything that isn't a non-empty string as "no URL" instead of crashing.
+  if (typeof raw !== 'string' || !raw) return '';
 
   // If the URL contains our media domain (possibly stored without scheme),
   // rewrite to a proper https:// URL starting at the /videos path.

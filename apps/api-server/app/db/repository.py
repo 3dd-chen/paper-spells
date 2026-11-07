@@ -6,6 +6,24 @@ import hmac
 import os
 from enum import Enum
 
+def _is_js_null(value) -> bool:
+    # Pyodide converts SQL NULL in D1 rows to a JS null proxy (JsNull), not
+    # Python None. FastAPI then serializes it as {}, which the frontend treats
+    # as a truthy URL object and crashes on.
+    return type(value).__name__ in ("JsNull", "JsUndefined") or (
+        value is not None and type(value).__module__.startswith("pyodide") and str(value) in ("null", "undefined")
+    )
+
+
+def _rows(result) -> List[dict]:
+    """Convert D1 .all() results to plain Python dicts with NULLs as None."""
+    rows = result.results.to_py()
+    return [
+        {k: (None if _is_js_null(v) else v) for k, v in row.items()}
+        for row in rows
+    ]
+
+
 class ArtworkStatus(str, Enum):
     PENDING = "pending"
     GENERATING = "generating"
@@ -31,7 +49,7 @@ class ArtworkRepository:
 
     async def get_by_id(self, task_id: str) -> Optional[dict]:
         result = await self.db.prepare("SELECT * FROM artworks WHERE id = ?").bind(task_id).all()
-        items = result.results.to_py()
+        items = _rows(result)
         return items[0] if items else None
 
     async def update_to_generating(
@@ -93,26 +111,26 @@ class ArtworkRepository:
             result = await self.db.prepare(
                 "SELECT * FROM artworks WHERE status = ? AND room_id = ? ORDER BY created_at ASC"
             ).bind(ArtworkStatus.GENERATING.value, room_id).all()
-        return result.results.to_py()
+        return _rows(result)
 
     async def get_all_completed(self, room_id: str) -> List[dict]:
         # 'ready' is a legacy status kept for backward compatibility.
         result = await self.db.prepare(
             "SELECT * FROM artworks WHERE (status = ? OR status = ?) AND room_id = ? AND hidden = 0 ORDER BY created_at DESC"
         ).bind(ArtworkStatus.COMPLETED.value, "ready", room_id).all()
-        return result.results.to_py()
+        return _rows(result)
 
     async def get_all_rooms(self) -> List[dict]:
         result = await self.db.prepare(
             "SELECT room_id, COUNT(*) as count FROM artworks GROUP BY room_id ORDER BY room_id"
         ).all()
-        return result.results.to_py()
+        return _rows(result)
 
     async def get_artworks_by_room(self, room_id: str) -> List[dict]:
         result = await self.db.prepare(
             "SELECT * FROM artworks WHERE room_id = ? ORDER BY created_at DESC"
         ).bind(room_id).all()
-        return result.results.to_py()
+        return _rows(result)
 
     async def set_hidden(self, artwork_id: str, hidden: bool) -> bool:
         await self.db.prepare(
@@ -123,7 +141,7 @@ class ArtworkRepository:
     async def delete_artwork(self, artwork_id: str) -> Optional[dict]:
         """Returns the artwork before deletion (for R2 cleanup)."""
         result = await self.db.prepare("SELECT * FROM artworks WHERE id = ?").bind(artwork_id).all()
-        items = result.results.to_py()
+        items = _rows(result)
         if not items:
             return None
         await self.db.prepare("DELETE FROM artworks WHERE id = ?").bind(artwork_id).run()
@@ -153,7 +171,7 @@ class AdminRepository:
         result = await self.db.prepare(
             "SELECT * FROM admins WHERE username = ?"
         ).bind(username).all()
-        items = result.results.to_py()
+        items = _rows(result)
         return items[0] if items else None
 
     async def verify_credentials(self, username: str, password: str) -> Optional[dict]:
